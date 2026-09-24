@@ -78,7 +78,7 @@ export default async function SharePage() {
   const tomorrowSessions = (tomorrowData ?? []) as Session[];
 
   const weekLines = [
-    "Sessions this week 💪",
+    "Sessions this week",
     ...weekSessions.map(
       (s) =>
         `${formatDay(s.session_date).split(" ")[0]} ${formatTime(s.start_time)}`,
