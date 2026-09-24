@@ -8,6 +8,7 @@ const ITEMS = [
   { href: "/sessions", label: "Sessions", icon: "clip" },
   { href: "/members", label: "Members", icon: "users" },
   { href: "/payments", label: "Payments", icon: "wallet" },
+  { href: "/share", label: "Share", icon: "send" },
   { href: "/settings", label: "Settings", icon: "sliders" },
 ];
 

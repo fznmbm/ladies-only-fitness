@@ -179,3 +179,18 @@ input[type="radio"], input[type="checkbox"] { width: 22px; min-height: 22px; hei
 @media (prefers-reduced-motion: reduce) {
   * { scroll-behavior: auto !important; transition: none !important; animation: none !important; }
 }
+
+/* ---------- Ladies' side ---------- */
+.plan-card { background: var(--plum); color: #fff; border-radius: 22px; padding: 18px; }
+.plan-label { font-size: 14px; font-weight: 500; color: rgba(255, 255, 255, 0.85); }
+.plan-big { font-family: "Fraunces", Georgia, serif; font-weight: 600; font-size: 36px; line-height: 1.1; margin-top: 4px; }
+.dots { display: flex; align-items: center; gap: 6px; margin-top: 12px; }
+.dot { width: 16px; height: 16px; border-radius: 50%; border: 1.5px solid rgba(255, 255, 255, 0.7); }
+.dot.used { background: #fff; border-color: #fff; }
+.dots-text { font-size: 13px; margin-left: 6px; color: rgba(255, 255, 255, 0.92); }
+.plan-foot { font-size: 13px; margin-top: 10px; color: rgba(255, 255, 255, 0.92); }
+
+.sendbox { background: var(--plum-tint); color: var(--plum); border-radius: 14px; padding: 12px 14px; display: flex; flex-direction: column; gap: 10px; }
+
+/* Hidden trap field for bots on the join form */
+.hp { position: absolute; left: -9999px; width: 1px; height: 1px; overflow: hidden; }

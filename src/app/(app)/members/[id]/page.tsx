@@ -6,6 +6,7 @@ import { pounds } from "@/lib/money";
 import { updateMember } from "@/app/actions";
 import { Icon } from "@/components/Icon";
 import { PageHead } from "@/components/PageHead";
+import { LoginLinkButton } from "@/components/LoginLink";
 import type { Member, Subscription } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
@@ -83,6 +84,19 @@ export default async function MemberPage({
           Save changes
         </button>
       </form>
+
+      {member.status === "active" ? (
+        <>
+          <h2 className="section-title">Her personal link</h2>
+          <div className="card stack">
+            <p className="small muted">
+              She taps the link once and is signed in on her phone, with no password. Making a new link stops her old one
+              from working.
+            </p>
+            <LoginLinkButton memberId={member.id} label={member.phone ? "Send her a link on WhatsApp" : "Make her a link"} />
+          </div>
+        </>
+      ) : null}
 
       <h2 className="section-title">Payments</h2>
       {subs.length === 0 ? (

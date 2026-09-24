@@ -1,7 +1,22 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 
+// Pages that don't need the organiser to be signed in.
+// "/" decides for itself where to send people. /me and /m/ use the ladies' personal link.
+function isPublic(path: string): boolean {
+  return (
+    path === "/" ||
+    path.startsWith("/join") ||
+    path.startsWith("/m/") ||
+    path.startsWith("/me") ||
+    path === "/manifest.webmanifest"
+  );
+}
+
 export async function middleware(request: NextRequest) {
+  const path = request.nextUrl.pathname;
+  if (isPublic(path)) return NextResponse.next({ request });
+
   let response = NextResponse.next({ request });
 
   const supabase = createServerClient(
@@ -27,7 +42,7 @@ export async function middleware(request: NextRequest) {
     data: { user },
   } = await supabase.auth.getUser();
 
-  const onLogin = request.nextUrl.pathname.startsWith("/login");
+  const onLogin = path.startsWith("/login");
   if (!user && !onLogin) {
     const url = request.nextUrl.clone();
     url.pathname = "/login";

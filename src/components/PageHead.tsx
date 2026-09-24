@@ -1,8 +1,7 @@
 import type { ReactNode } from "react";
+import { groupName } from "@/lib/config";
 
-export function groupName() {
-  return process.env.NEXT_PUBLIC_GROUP_NAME || "Ladies Fitness";
-}
+export { groupName };
 
 export function PageHead({ title, sub, children }: { title: string; sub?: string; children?: ReactNode }) {
   return (

@@ -4,6 +4,8 @@ import { addPlan, addSlot, deleteSlot, savePlan, setPlanActive } from "@/app/act
 import { signOut } from "@/app/login/actions";
 import { Icon } from "@/components/Icon";
 import { PageHead } from "@/components/PageHead";
+import { InstallHint } from "@/components/InstallHint";
+import { groupName, joinLink, siteOrigin } from "@/lib/config";
 import type { Plan, Slot } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
@@ -19,9 +21,31 @@ export default async function SettingsPage() {
   const active = plans.filter((p) => p.active);
   const archived = plans.filter((p) => !p.active);
 
+  const invite = joinLink(await siteOrigin());
+  const inviteText = `Hi ladies! To join ${groupName()} online, tap this link and enter your name and WhatsApp number. I'll send you your own link once I've checked it: ${invite}`;
+  const inviteWa = `https://wa.me/?text=${encodeURIComponent(inviteText)}`;
+
   return (
     <>
       <PageHead title="Settings" />
+
+      <h2 className="section-title" style={{ marginTop: 0 }}>
+        Invite the ladies
+      </h2>
+      <div className="card stack">
+        <p className="small muted">
+          Post this in the WhatsApp group. Each lady asks to join, and you approve her under Members.
+        </p>
+        <p className="small" style={{ wordBreak: "break-all" }}>
+          {invite}
+        </p>
+        <a href={inviteWa} target="_blank" rel="noopener noreferrer" className="btn btn-primary btn-block">
+          <Icon name="send" size={18} /> Share in WhatsApp
+        </a>
+      </div>
+
+      <h2 className="section-title">This app on your phone</h2>
+      <InstallHint />
 
       <h2 className="section-title">Plans and prices</h2>
       <div className="note" style={{ marginBottom: 12 }}>

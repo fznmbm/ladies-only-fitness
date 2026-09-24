@@ -38,7 +38,15 @@ const PATHS: Record<string, ReactElement> = {
       <path d="M18 12a2 2 0 0 0 0 4h4v-4Z" />
     </>
   ),
-  sliders: <path d="M4 21v-7M4 10V3M12 21v-9M12 8V3M20 21v-5M20 12V3M1 14h6M9 8h6M17 16h6" />,
+  sliders: (
+    <path d="M4 21v-7M4 10V3M12 21v-9M12 8V3M20 21v-5M20 12V3M1 14h6M9 8h6M17 16h6" />
+  ),
+  upload: (
+    <>
+      <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+      <path d="m17 8-5-5-5 5M12 3v12" />
+    </>
+  ),
 };
 
 export function Icon({ name, size = 20 }: { name: string; size?: number }) {

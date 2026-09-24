@@ -4,8 +4,17 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { createClient, type Db } from "@/lib/supabase/server";
 import { memberContext } from "@/lib/coverage";
-import { addDays, addMonths, monthStart, todayISO, weekStart } from "@/lib/dates";
+import {
+  addDays,
+  addMonths,
+  monthStart,
+  todayISO,
+  weekStart,
+} from "@/lib/dates";
 import { toPence } from "@/lib/money";
+import { groupName, siteOrigin } from "@/lib/config";
+import { hashToken, newToken } from "@/lib/memberAuth";
+import { whatsappUrl } from "@/lib/phone";
 import type { Plan } from "@/lib/types";
 
 function refresh() {
@@ -46,18 +55,30 @@ export async function generateSessions() {
 
   const today = todayISO();
   const start = weekStart(today);
-  const rows: { session_date: string; start_time: string; title: string }[] = [];
+  const rows: { session_date: string; start_time: string; title: string }[] =
+    [];
   for (let week = 0; week < 4; week++) {
-    for (const s of slots as { weekday: number; start_time: string; title: string }[]) {
+    for (const s of slots as {
+      weekday: number;
+      start_time: string;
+      title: string;
+    }[]) {
       const date = addDays(start, week * 7 + (s.weekday - 1));
       if (date < today) continue;
-      rows.push({ session_date: date, start_time: s.start_time, title: s.title });
+      rows.push({
+        session_date: date,
+        start_time: s.start_time,
+        title: s.title,
+      });
     }
   }
   if (rows.length > 0) {
     const { error } = await supabase
       .from("sessions")
-      .upsert(rows, { onConflict: "session_date,start_time", ignoreDuplicates: true });
+      .upsert(rows, {
+        onConflict: "session_date,start_time",
+        ignoreDuplicates: true,
+      });
     check(error);
   }
   refresh();
@@ -68,10 +89,16 @@ export async function addSession(formData: FormData) {
   const date = str(formData, "date");
   const time = str(formData, "time");
   if (!date || !time) return;
-  const { error } = await supabase.from("sessions").upsert(
-    { session_date: date, start_time: time, title: str(formData, "title") || "Workout session" },
-    { onConflict: "session_date,start_time", ignoreDuplicates: true },
-  );
+  const { error } = await supabase
+    .from("sessions")
+    .upsert(
+      {
+        session_date: date,
+        start_time: time,
+        title: str(formData, "title") || "Workout session",
+      },
+      { onConflict: "session_date,start_time", ignoreDuplicates: true },
+    );
   check(error);
   refresh();
 }
@@ -102,7 +129,10 @@ export async function toggleHere(formData: FormData) {
     .maybeSingle();
 
   if (existing) {
-    const { error } = await supabase.from("attendance").delete().eq("id", existing.id);
+    const { error } = await supabase
+      .from("attendance")
+      .delete()
+      .eq("id", existing.id);
     check(error);
     refresh();
     return;
@@ -115,7 +145,12 @@ export async function toggleHere(formData: FormData) {
     .single();
   if (!session) return;
 
-  const { sub, usedOthers } = await memberContext(supabase, memberId, sessionId, session.session_date);
+  const { sub, usedOthers } = await memberContext(
+    supabase,
+    memberId,
+    sessionId,
+    session.session_date,
+  );
   let flag: "over_plan" | "no_plan" | null = null;
   if (!sub) flag = "no_plan";
   else if (usedOthers >= sub.sessions_per_week) flag = "over_plan";
@@ -129,7 +164,10 @@ export async function toggleHere(formData: FormData) {
 
 export async function undoHere(formData: FormData) {
   const supabase = await createClient();
-  const { error } = await supabase.from("attendance").delete().eq("id", str(formData, "attendanceId"));
+  const { error } = await supabase
+    .from("attendance")
+    .delete()
+    .eq("id", str(formData, "attendanceId"));
   check(error);
   refresh();
 }
@@ -148,7 +186,10 @@ export async function cashExtra(formData: FormData) {
   const supabase = await createClient();
   const { error } = await supabase
     .from("attendance")
-    .update({ resolution: "cash", extra_paid_pence: toPence(str(formData, "amount")) })
+    .update({
+      resolution: "cash",
+      extra_paid_pence: toPence(str(formData, "amount")),
+    })
     .eq("id", str(formData, "attendanceId"));
   check(error);
   refresh();
@@ -172,8 +213,16 @@ export async function cashPlan(formData: FormData) {
   const memberId = str(formData, "memberId");
 
   const [{ data: plan }, { data: session }] = await Promise.all([
-    supabase.from("plans").select("*").eq("id", str(formData, "planId")).single(),
-    supabase.from("sessions").select("session_date").eq("id", sessionId).single(),
+    supabase
+      .from("plans")
+      .select("*")
+      .eq("id", str(formData, "planId"))
+      .single(),
+    supabase
+      .from("sessions")
+      .select("session_date")
+      .eq("id", sessionId)
+      .single(),
   ]);
   if (!plan || !session) return;
   const p = plan as Plan;
@@ -246,7 +295,8 @@ export async function updateMember(formData: FormData) {
       status: str(formData, "status") || "active",
     })
     .eq("id", id);
-  if (error) redirect(`/members/${id}?error=` + encodeURIComponent(error.message));
+  if (error)
+    redirect(`/members/${id}?error=` + encodeURIComponent(error.message));
   refresh();
 }
 
@@ -258,8 +308,16 @@ export async function recordPayment(formData: FormData) {
   const month = str(formData, "month");
   const method = str(formData, "method") === "transfer" ? "transfer" : "cash";
 
-  const { data: plan } = await supabase.from("plans").select("*").eq("id", str(formData, "planId")).single();
-  if (!plan || !memberId || !month) redirect("/payments?error=" + encodeURIComponent("Choose a lady, a plan and a month."));
+  const { data: plan } = await supabase
+    .from("plans")
+    .select("*")
+    .eq("id", str(formData, "planId"))
+    .single();
+  if (!plan || !memberId || !month)
+    redirect(
+      "/payments?error=" +
+        encodeURIComponent("Choose a lady, a plan and a month."),
+    );
   const p = plan as Plan;
 
   const { error } = await supabase.from("subscriptions").insert({
@@ -290,6 +348,24 @@ export async function voidPayment(formData: FormData) {
     .update({ status: "rejected" })
     .eq("id", str(formData, "id"));
   check(error);
+  refresh();
+}
+
+/** She uploaded a receipt; the organiser checks it, then confirms it here. */
+export async function confirmPayment(formData: FormData) {
+  const supabase = await createClient();
+  const id = str(formData, "id");
+  const { data: sub } = await supabase
+    .from("subscriptions")
+    .select("member_id, month")
+    .eq("id", id)
+    .single();
+  const { error } = await supabase
+    .from("subscriptions")
+    .update({ status: "confirmed", confirmed_at: new Date().toISOString() })
+    .eq("id", id);
+  check(error);
+  if (sub) await settlePayLater(supabase, sub.member_id, sub.month);
   refresh();
 }
 
@@ -348,7 +424,76 @@ export async function addSlot(formData: FormData) {
 
 export async function deleteSlot(formData: FormData) {
   const supabase = await createClient();
-  const { error } = await supabase.from("schedule_slots").delete().eq("id", str(formData, "id"));
+  const { error } = await supabase
+    .from("schedule_slots")
+    .delete()
+    .eq("id", str(formData, "id"));
+  check(error);
+  refresh();
+}
+
+// ---------- Ladies' personal links ----------
+
+export type LinkState =
+  | { url: string; wa: string | null }
+  | { error: string }
+  | null;
+
+/** Makes a fresh personal link for a lady. Any older link stops working. */
+async function issueLink(supabase: Db, memberId: string): Promise<LinkState> {
+  const { data: member } = await supabase
+    .from("members")
+    .select("id, name, phone")
+    .eq("id", memberId)
+    .single();
+  if (!member) return { error: "Couldn't find that member." };
+
+  const token = newToken();
+  const { error } = await supabase
+    .from("members")
+    .update({ login_token_hash: hashToken(token) })
+    .eq("id", memberId);
+  if (error) return { error: error.message };
+
+  const url = `${await siteOrigin()}/m/${token}`;
+  const first = String(member.name).split(" ")[0];
+  const text =
+    `Hi ${first}, here's your personal link for ${groupName()}: ${url}\n\n` +
+    `Tap it once, then add it to your home screen. It's just for you, so please don't share it.`;
+  return { url, wa: whatsappUrl(member.phone, text) };
+}
+
+export async function makeLoginLink(
+  _prev: LinkState,
+  formData: FormData,
+): Promise<LinkState> {
+  const supabase = await createClient();
+  return issueLink(supabase, str(formData, "memberId"));
+}
+
+export async function approveRequest(
+  _prev: LinkState,
+  formData: FormData,
+): Promise<LinkState> {
+  const supabase = await createClient();
+  const memberId = str(formData, "memberId");
+  const { error } = await supabase
+    .from("members")
+    .update({ status: "active", approved_at: new Date().toISOString() })
+    .eq("id", memberId)
+    .eq("status", "pending");
+  if (error) return { error: error.message };
+  // No refresh here on purpose: the row stays on screen so the link can be sent.
+  return issueLink(supabase, memberId);
+}
+
+export async function declineRequest(formData: FormData) {
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("members")
+    .delete()
+    .eq("id", str(formData, "memberId"))
+    .eq("status", "pending");
   check(error);
   refresh();
 }

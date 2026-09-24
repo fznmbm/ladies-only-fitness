@@ -54,3 +54,11 @@ export type Slot = {
   start_time: string;
   title: string;
 };
+
+export type Rsvp = {
+  id: string;
+  session_id: string;
+  member_id: string;
+  coming: boolean;
+  created_at: string;
+};

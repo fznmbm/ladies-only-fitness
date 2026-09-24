@@ -31,8 +31,12 @@ create table if not exists members (
   phone text,
   status text not null default 'active' check (status in ('pending', 'active', 'inactive')),
   notes text,
+  login_token_hash text,
+  approved_at timestamptz,
   created_at timestamptz not null default now()
 );
+create unique index if not exists members_login_token_hash_key
+  on members (login_token_hash) where login_token_hash is not null;
 create unique index if not exists members_phone_key on members (phone) where phone is not null;
 
 -- One paid plan per member per calendar month.

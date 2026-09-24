@@ -5,6 +5,12 @@ export const metadata: Metadata = {
   title: "Ladies Fitness",
   description: "Sessions, plans and attendance for the ladies fitness group.",
   robots: { index: false, follow: false },
+  manifest: "/manifest.webmanifest",
+  icons: {
+    icon: [{ url: "/icon-192.png", sizes: "192x192", type: "image/png" }],
+    apple: "/apple-touch-icon.png",
+  },
+  appleWebApp: { capable: true, title: "Fitness", statusBarStyle: "default" },
 };
 
 export const viewport: Viewport = {
