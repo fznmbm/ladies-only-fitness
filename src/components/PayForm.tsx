@@ -85,7 +85,6 @@ export function PayForm({
           name="receipt"
           type="file"
           accept="image/*"
-          capture="environment"
           required
           onChange={(e) => setFileName(e.target.files?.[0]?.name ?? null)}
         />

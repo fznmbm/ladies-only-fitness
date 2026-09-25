@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { createClient, type Db } from "@/lib/supabase/server";
-import { memberContext } from "@/lib/coverage";
+//import { memberContext } from "@/lib/coverage";
 import {
   addDays,
   addMonths,
@@ -73,12 +73,10 @@ export async function generateSessions() {
     }
   }
   if (rows.length > 0) {
-    const { error } = await supabase
-      .from("sessions")
-      .upsert(rows, {
-        onConflict: "session_date,start_time",
-        ignoreDuplicates: true,
-      });
+    const { error } = await supabase.from("sessions").upsert(rows, {
+      onConflict: "session_date,start_time",
+      ignoreDuplicates: true,
+    });
     check(error);
   }
   refresh();
@@ -89,16 +87,14 @@ export async function addSession(formData: FormData) {
   const date = str(formData, "date");
   const time = str(formData, "time");
   if (!date || !time) return;
-  const { error } = await supabase
-    .from("sessions")
-    .upsert(
-      {
-        session_date: date,
-        start_time: time,
-        title: str(formData, "title") || "Workout session",
-      },
-      { onConflict: "session_date,start_time", ignoreDuplicates: true },
-    );
+  const { error } = await supabase.from("sessions").upsert(
+    {
+      session_date: date,
+      start_time: time,
+      title: str(formData, "title") || "Workout session",
+    },
+    { onConflict: "session_date,start_time", ignoreDuplicates: true },
+  );
   check(error);
   refresh();
 }
@@ -115,49 +111,17 @@ export async function setCancelled(formData: FormData) {
 
 // ---------- Register ----------
 
-/** Tap "Here": marks her present, or takes it back if she is already marked. */
+/**
+ * Tap "Here": marks her present, or takes it back if she is already marked.
+ * The database does the whole check in one call (see migration 004).
+ * If cash was taken for this visit, it is kept rather than removed.
+ */
 export async function toggleHere(formData: FormData) {
   const supabase = await createClient();
-  const sessionId = str(formData, "sessionId");
-  const memberId = str(formData, "memberId");
-
-  const { data: existing } = await supabase
-    .from("attendance")
-    .select("id")
-    .eq("session_id", sessionId)
-    .eq("member_id", memberId)
-    .maybeSingle();
-
-  if (existing) {
-    const { error } = await supabase
-      .from("attendance")
-      .delete()
-      .eq("id", existing.id);
-    check(error);
-    refresh();
-    return;
-  }
-
-  const { data: session } = await supabase
-    .from("sessions")
-    .select("session_date")
-    .eq("id", sessionId)
-    .single();
-  if (!session) return;
-
-  const { sub, usedOthers } = await memberContext(
-    supabase,
-    memberId,
-    sessionId,
-    session.session_date,
-  );
-  let flag: "over_plan" | "no_plan" | null = null;
-  if (!sub) flag = "no_plan";
-  else if (usedOthers >= sub.sessions_per_week) flag = "over_plan";
-
-  const { error } = await supabase
-    .from("attendance")
-    .insert({ session_id: sessionId, member_id: memberId, flag });
+  const { error } = await supabase.rpc("toggle_here", {
+    p_session_id: str(formData, "sessionId"),
+    p_member_id: str(formData, "memberId"),
+  });
   check(error);
   refresh();
 }

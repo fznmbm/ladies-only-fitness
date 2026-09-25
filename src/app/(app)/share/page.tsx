@@ -10,13 +10,13 @@ import {
 } from "@/lib/dates";
 import { Icon } from "@/components/Icon";
 import { PageHead } from "@/components/PageHead";
+import { ShareToWhatsApp } from "@/components/ShareToWhatsApp";
 import type { Session } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
 
 function MessageCard({ title, lines }: { title: string; lines: string[] }) {
   const text = lines.join("\n");
-  const wa = `https://wa.me/?text=${encodeURIComponent(text)}`;
   return (
     <div className="card stack">
       <h2 className="section-title" style={{ margin: 0 }}>
@@ -32,14 +32,9 @@ function MessageCard({ title, lines }: { title: string; lines: string[] }) {
       >
         {text}
       </div>
-      <a
-        href={wa}
-        target="_blank"
-        rel="noopener noreferrer"
-        className="btn btn-primary btn-block"
-      >
+      <ShareToWhatsApp text={text}>
         <Icon name="send" size={18} /> Share to WhatsApp
-      </a>
+      </ShareToWhatsApp>
     </div>
   );
 }

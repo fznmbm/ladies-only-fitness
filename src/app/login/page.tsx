@@ -1,5 +1,6 @@
 import { signIn } from "./actions";
 import { groupName } from "@/components/PageHead";
+import { SubmitButton } from "@/components/SubmitButton";
 
 export default async function LoginPage({
   searchParams,
@@ -20,15 +21,31 @@ export default async function LoginPage({
         ) : null}
         <div className="field">
           <label htmlFor="email">Email</label>
-          <input id="email" name="email" type="email" autoComplete="email" required />
+          <input
+            id="email"
+            name="email"
+            type="email"
+            autoComplete="email"
+            required
+          />
         </div>
         <div className="field">
           <label htmlFor="password">Password</label>
-          <input id="password" name="password" type="password" autoComplete="current-password" required />
+          <input
+            id="password"
+            name="password"
+            type="password"
+            autoComplete="current-password"
+            required
+          />
         </div>
-        <button type="submit" className="btn btn-primary btn-block" style={{ minHeight: 52 }}>
+        <SubmitButton
+          className="btn btn-primary btn-block"
+          style={{ minHeight: 52 }}
+          pendingText="Signing in…"
+        >
           Sign in
-        </button>
+        </SubmitButton>
       </form>
     </main>
   );

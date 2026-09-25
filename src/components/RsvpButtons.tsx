@@ -1,4 +1,5 @@
 import { Icon } from "./Icon";
+import { SubmitButton } from "./SubmitButton";
 import { setRsvp, clearRsvp } from "@/app/me/actions";
 
 type Props = {
@@ -13,8 +14,8 @@ export function RsvpButtons({ sessionId, state }: Props) {
       <form action={state === "yes" ? clearRsvp : setRsvp} style={{ flex: 1 }}>
         <input type="hidden" name="sessionId" value={sessionId} />
         <input type="hidden" name="coming" value="true" />
-        <button
-          type="submit"
+        <SubmitButton
+          pendingText="Saving…"
           className={
             state === "yes"
               ? "btn btn-primary btn-block"
@@ -24,13 +25,13 @@ export function RsvpButtons({ sessionId, state }: Props) {
         >
           {state === "yes" ? <Icon name="check" size={18} /> : null}
           I&apos;m coming
-        </button>
+        </SubmitButton>
       </form>
       <form action={state === "no" ? clearRsvp : setRsvp} style={{ flex: 1 }}>
         <input type="hidden" name="sessionId" value={sessionId} />
         <input type="hidden" name="coming" value="false" />
-        <button
-          type="submit"
+        <SubmitButton
+          pendingText="Saving…"
           className={
             state === "no" ? "btn btn-block" : "btn btn-outline btn-block"
           }
@@ -47,7 +48,7 @@ export function RsvpButtons({ sessionId, state }: Props) {
         >
           {state === "no" ? <Icon name="x" size={18} /> : null}
           Can&apos;t make it
-        </button>
+        </SubmitButton>
       </form>
     </div>
   );

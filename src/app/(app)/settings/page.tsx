@@ -1,10 +1,18 @@
 import { createClient } from "@/lib/supabase/server";
 import { WEEKDAYS, formatTime } from "@/lib/dates";
-import { addPlan, addSlot, deleteSlot, savePlan, setPlanActive } from "@/app/actions";
+import {
+  addPlan,
+  addSlot,
+  deleteSlot,
+  savePlan,
+  setPlanActive,
+} from "@/app/actions";
 import { signOut } from "@/app/login/actions";
 import { Icon } from "@/components/Icon";
 import { PageHead } from "@/components/PageHead";
+import { SubmitButton } from "@/components/SubmitButton";
 import { InstallHint } from "@/components/InstallHint";
+import { ShareToWhatsApp } from "@/components/ShareToWhatsApp";
 import { groupName, joinLink, siteOrigin } from "@/lib/config";
 import type { Plan, Slot } from "@/lib/types";
 
@@ -14,7 +22,11 @@ export default async function SettingsPage() {
   const supabase = await createClient();
   const [{ data: plansData }, { data: slotsData }] = await Promise.all([
     supabase.from("plans").select("*").order("sort").order("sessions_per_week"),
-    supabase.from("schedule_slots").select("*").order("weekday").order("start_time"),
+    supabase
+      .from("schedule_slots")
+      .select("*")
+      .order("weekday")
+      .order("start_time"),
   ]);
   const plans = (plansData ?? []) as Plan[];
   const slots = (slotsData ?? []) as Slot[];
@@ -23,7 +35,7 @@ export default async function SettingsPage() {
 
   const invite = joinLink(await siteOrigin());
   const inviteText = `Hi ladies! To join ${groupName()} online, tap this link and enter your name and WhatsApp number. I'll send you your own link once I've checked it: ${invite}`;
-  const inviteWa = `https://wa.me/?text=${encodeURIComponent(inviteText)}`;
+  // const inviteWa = `https://wa.me/?text=${encodeURIComponent(inviteText)}`;
 
   return (
     <>
@@ -34,14 +46,15 @@ export default async function SettingsPage() {
       </h2>
       <div className="card stack">
         <p className="small muted">
-          Post this in the WhatsApp group. Each lady asks to join, and you approve her under Members.
+          Post this in the WhatsApp group. Each lady asks to join, and you
+          approve her under Members.
         </p>
         <p className="small" style={{ wordBreak: "break-all" }}>
           {invite}
         </p>
-        <a href={inviteWa} target="_blank" rel="noopener noreferrer" className="btn btn-primary btn-block">
+        <ShareToWhatsApp text={inviteText}>
           <Icon name="send" size={18} /> Share in WhatsApp
-        </a>
+        </ShareToWhatsApp>
       </div>
 
       <h2 className="section-title">This app on your phone</h2>
@@ -50,7 +63,10 @@ export default async function SettingsPage() {
       <h2 className="section-title">Plans and prices</h2>
       <div className="note" style={{ marginBottom: 12 }}>
         <Icon name="clock" />
-        <span>Plans run for the calendar month. New prices only apply to payments recorded from now on.</span>
+        <span>
+          Plans run for the calendar month. New prices only apply to payments
+          recorded from now on.
+        </span>
       </div>
 
       <div className="stack">
@@ -60,28 +76,53 @@ export default async function SettingsPage() {
               <input type="hidden" name="id" value={p.id} />
               <div className="field">
                 <label htmlFor={`name-${p.id}`}>Name</label>
-                <input id={`name-${p.id}`} name="name" defaultValue={p.name} required />
+                <input
+                  id={`name-${p.id}`}
+                  name="name"
+                  defaultValue={p.name}
+                  required
+                />
               </div>
               <div className="form-row">
                 <div className="field">
                   <label htmlFor={`sessions-${p.id}`}>Sessions a week</label>
-                  <input id={`sessions-${p.id}`} name="sessions" type="number" min={1} max={7} defaultValue={p.sessions_per_week} required />
+                  <input
+                    id={`sessions-${p.id}`}
+                    name="sessions"
+                    type="number"
+                    min={1}
+                    max={7}
+                    defaultValue={p.sessions_per_week}
+                    required
+                  />
                 </div>
                 <div className="field">
                   <label htmlFor={`price-${p.id}`}>Price a month (£)</label>
-                  <input id={`price-${p.id}`} name="price" inputMode="decimal" defaultValue={p.price_pence / 100} required />
+                  <input
+                    id={`price-${p.id}`}
+                    name="price"
+                    inputMode="decimal"
+                    defaultValue={p.price_pence / 100}
+                    required
+                  />
                 </div>
               </div>
-              <button type="submit" className="btn btn-primary btn-block">
+              <SubmitButton
+                className="btn btn-primary btn-block"
+                pendingText="Saving…"
+              >
                 Save changes
-              </button>
+              </SubmitButton>
             </form>
             <form action={setPlanActive}>
               <input type="hidden" name="id" value={p.id} />
               <input type="hidden" name="active" value="false" />
-              <button type="submit" className="btn btn-quiet btn-block btn-small">
+              <SubmitButton
+                className="btn btn-quiet btn-block btn-small"
+                pendingText="Saving…"
+              >
                 Stop offering this plan
-              </button>
+              </SubmitButton>
             </form>
           </div>
         ))}
@@ -98,16 +139,32 @@ export default async function SettingsPage() {
             <div className="form-row">
               <div className="field">
                 <label htmlFor="new-sessions">Sessions a week</label>
-                <input id="new-sessions" name="sessions" type="number" min={1} max={7} defaultValue={2} required />
+                <input
+                  id="new-sessions"
+                  name="sessions"
+                  type="number"
+                  min={1}
+                  max={7}
+                  defaultValue={2}
+                  required
+                />
               </div>
               <div className="field">
                 <label htmlFor="new-price">Price a month (£)</label>
-                <input id="new-price" name="price" inputMode="decimal" required />
+                <input
+                  id="new-price"
+                  name="price"
+                  inputMode="decimal"
+                  required
+                />
               </div>
             </div>
-            <button type="submit" className="btn btn-primary btn-block">
+            <SubmitButton
+              className="btn btn-primary btn-block"
+              pendingText="Adding…"
+            >
               Add plan
-            </button>
+            </SubmitButton>
           </form>
         </details>
 
@@ -116,15 +173,23 @@ export default async function SettingsPage() {
             <summary>Plans no longer offered</summary>
             <div className="body">
               {archived.map((p) => (
-                <form key={p.id} action={setPlanActive} className="cluster" style={{ justifyContent: "space-between" }}>
+                <form
+                  key={p.id}
+                  action={setPlanActive}
+                  className="cluster"
+                  style={{ justifyContent: "space-between" }}
+                >
                   <input type="hidden" name="id" value={p.id} />
                   <input type="hidden" name="active" value="true" />
                   <span>
                     {p.name}, £{p.price_pence / 100}
                   </span>
-                  <button type="submit" className="btn btn-outline btn-small">
+                  <SubmitButton
+                    className="btn btn-outline btn-small"
+                    pendingText="Saving…"
+                  >
                     Offer again
-                  </button>
+                  </SubmitButton>
                 </form>
               ))}
             </div>
@@ -138,7 +203,10 @@ export default async function SettingsPage() {
       {slots.length === 0 ? (
         <div className="note" style={{ marginBottom: 12 }}>
           <Icon name="clock" />
-          <span>Add each weekly session here, then create sessions from the Sessions screen.</span>
+          <span>
+            Add each weekly session here, then create sessions from the Sessions
+            screen.
+          </span>
         </div>
       ) : (
         <ul className="list" style={{ marginBottom: 12 }}>
@@ -152,9 +220,12 @@ export default async function SettingsPage() {
               </div>
               <form action={deleteSlot}>
                 <input type="hidden" name="id" value={s.id} />
-                <button type="submit" className="btn btn-quiet btn-small" aria-label={`Remove ${WEEKDAYS[s.weekday - 1]} ${formatTime(s.start_time)}`}>
+                <SubmitButton
+                  className="btn btn-quiet btn-small"
+                  aria-label={`Remove ${WEEKDAYS[s.weekday - 1]} ${formatTime(s.start_time)}`}
+                >
                   <Icon name="x" size={18} />
-                </button>
+                </SubmitButton>
               </form>
             </li>
           ))}
@@ -186,16 +257,22 @@ export default async function SettingsPage() {
             <label htmlFor="slot-title">Name (optional)</label>
             <input id="slot-title" name="title" placeholder="Workout session" />
           </div>
-          <button type="submit" className="btn btn-primary btn-block">
+          <SubmitButton
+            className="btn btn-primary btn-block"
+            pendingText="Adding…"
+          >
             Add to timetable
-          </button>
+          </SubmitButton>
         </form>
       </details>
 
       <form action={signOut} style={{ marginTop: 32 }}>
-        <button type="submit" className="btn btn-quiet btn-block">
+        <SubmitButton
+          className="btn btn-quiet btn-block"
+          pendingText="Signing out…"
+        >
           Sign out
-        </button>
+        </SubmitButton>
       </form>
     </>
   );

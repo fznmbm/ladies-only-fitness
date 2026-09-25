@@ -1,9 +1,16 @@
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
-import { addDays, formatDay, formatTime, todayISO, weekStart } from "@/lib/dates";
+import {
+  addDays,
+  formatDay,
+  formatTime,
+  todayISO,
+  weekStart,
+} from "@/lib/dates";
 import { addSession, generateSessions } from "@/app/actions";
 import { PageHead } from "@/components/PageHead";
 import { Icon } from "@/components/Icon";
+import { SubmitButton } from "@/components/SubmitButton";
 import type { Session } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
@@ -20,7 +27,9 @@ export default async function SessionsPage() {
       .lte("session_date", addDays(today, 27))
       .order("session_date")
       .order("start_time"),
-    supabase.from("schedule_slots").select("id", { count: "exact", head: true }),
+    supabase
+      .from("schedule_slots")
+      .select("id", { count: "exact", head: true }),
   ]);
 
   const sessions = (data ?? []) as Session[];
@@ -29,14 +38,18 @@ export default async function SessionsPage() {
     const { data: att } = await supabase
       .from("attendance")
       .select("session_id")
-      .in("session_id", sessions.map((s) => s.id));
+      .in(
+        "session_id",
+        sessions.map((s) => s.id),
+      );
     for (const a of (att ?? []) as { session_id: string }[]) {
       counts.set(a.session_id, (counts.get(a.session_id) ?? 0) + 1);
     }
   }
 
   const byDate = new Map<string, Session[]>();
-  for (const s of sessions) byDate.set(s.session_date, [...(byDate.get(s.session_date) ?? []), s]);
+  for (const s of sessions)
+    byDate.set(s.session_date, [...(byDate.get(s.session_date) ?? []), s]);
 
   return (
     <>
@@ -47,9 +60,9 @@ export default async function SessionsPage() {
           <p>No sessions yet.</p>
           {(slotCount ?? 0) > 0 ? (
             <form action={generateSessions}>
-              <button type="submit" className="btn btn-primary">
+              <SubmitButton className="btn btn-primary" pendingText="Creating…">
                 <Icon name="plus" /> Create the next 4 weeks
-              </button>
+              </SubmitButton>
             </form>
           ) : (
             <Link href="/settings" className="btn btn-primary">
@@ -70,11 +83,19 @@ export default async function SessionsPage() {
                 <div className="stack" style={{ gap: 8 }}>
                   {list.map((s) => {
                     const came = counts.get(s.id) ?? 0;
-                    const classes = ["session-card", isToday ? "today" : "", s.cancelled ? "cancelled" : ""]
+                    const classes = [
+                      "session-card",
+                      isToday ? "today" : "",
+                      s.cancelled ? "cancelled" : "",
+                    ]
                       .filter(Boolean)
                       .join(" ");
                     return (
-                      <Link key={s.id} href={`/sessions/${s.id}`} className={classes}>
+                      <Link
+                        key={s.id}
+                        href={`/sessions/${s.id}`}
+                        className={classes}
+                      >
                         <span className="time">{formatTime(s.start_time)}</span>
                         <span className="grow">
                           <span className="name">{s.title}</span>
@@ -97,9 +118,12 @@ export default async function SessionsPage() {
       <div className="stack" style={{ marginTop: 28 }}>
         {sessions.length > 0 && (slotCount ?? 0) > 0 ? (
           <form action={generateSessions}>
-            <button type="submit" className="btn btn-outline btn-block">
+            <SubmitButton
+              className="btn btn-outline btn-block"
+              pendingText="Adding…"
+            >
               <Icon name="plus" /> Add sessions from the weekly timetable
-            </button>
+            </SubmitButton>
           </form>
         ) : null}
         <details className="details">
@@ -121,9 +145,12 @@ export default async function SessionsPage() {
               <label htmlFor="title">Name (optional)</label>
               <input id="title" name="title" placeholder="Workout session" />
             </div>
-            <button type="submit" className="btn btn-primary btn-block">
+            <SubmitButton
+              className="btn btn-primary btn-block"
+              pendingText="Adding…"
+            >
               Add session
-            </button>
+            </SubmitButton>
           </form>
         </details>
       </div>

@@ -6,6 +6,7 @@ import { pounds } from "@/lib/money";
 import { updateMember } from "@/app/actions";
 import { Icon } from "@/components/Icon";
 import { PageHead } from "@/components/PageHead";
+import { SubmitButton } from "@/components/SubmitButton";
 import { LoginLinkButton } from "@/components/LoginLink";
 import type { Member, Subscription } from "@/lib/types";
 
@@ -22,28 +23,46 @@ export default async function MemberPage({
   const { error } = await searchParams;
   const supabase = await createClient();
 
-  const { data: memberRow } = await supabase.from("members").select("*").eq("id", id).maybeSingle();
+  const { data: memberRow } = await supabase
+    .from("members")
+    .select("*")
+    .eq("id", id)
+    .maybeSingle();
   if (!memberRow) notFound();
   const member = memberRow as Member;
 
   const [{ data: subsData }, { data: attData }] = await Promise.all([
-    supabase.from("subscriptions").select("*").eq("member_id", id).neq("status", "rejected").order("month", { ascending: false }).limit(12),
+    supabase
+      .from("subscriptions")
+      .select("*")
+      .eq("member_id", id)
+      .neq("status", "rejected")
+      .order("month", { ascending: false })
+      .limit(12),
     supabase
       .from("attendance")
-      .select("id, flag, resolution, extra_paid_pence, sessions(session_date, start_time)")
+      .select(
+        "id, flag, resolution, extra_paid_pence, sessions(session_date, start_time)",
+      )
       .eq("member_id", id)
       .limit(60),
   ]);
 
   const subs = (subsData ?? []) as Subscription[];
-  const visits = ((attData ?? []) as unknown as {
-    id: string;
-    flag: string | null;
-    resolution: string | null;
-    extra_paid_pence: number;
-    sessions: { session_date: string; start_time: string };
-  }[])
-    .sort((a, b) => (b.sessions.session_date + b.sessions.start_time).localeCompare(a.sessions.session_date + a.sessions.start_time))
+  const visits = (
+    (attData ?? []) as unknown as {
+      id: string;
+      flag: string | null;
+      resolution: string | null;
+      extra_paid_pence: number;
+      sessions: { session_date: string; start_time: string };
+    }[]
+  )
+    .sort((a, b) =>
+      (b.sessions.session_date + b.sessions.start_time).localeCompare(
+        a.sessions.session_date + a.sessions.start_time,
+      ),
+    )
     .slice(0, 20);
 
   return (
@@ -55,7 +74,9 @@ export default async function MemberPage({
 
       {error ? (
         <div className="note warn" role="alert" style={{ marginBottom: 12 }}>
-          {error.includes("members_phone_key") ? "Someone with that number is already a member." : error}
+          {error.includes("members_phone_key")
+            ? "Someone with that number is already a member."
+            : error}
         </div>
       ) : null}
 
@@ -67,7 +88,13 @@ export default async function MemberPage({
         </div>
         <div className="field">
           <label htmlFor="phone">WhatsApp number</label>
-          <input id="phone" name="phone" type="tel" inputMode="tel" defaultValue={member.phone ?? ""} />
+          <input
+            id="phone"
+            name="phone"
+            type="tel"
+            inputMode="tel"
+            defaultValue={member.phone ?? ""}
+          />
         </div>
         <div className="field">
           <label htmlFor="status">Status</label>
@@ -80,9 +107,12 @@ export default async function MemberPage({
           <label htmlFor="notes">Notes for the organiser</label>
           <textarea id="notes" name="notes" defaultValue={member.notes ?? ""} />
         </div>
-        <button type="submit" className="btn btn-primary btn-block">
+        <SubmitButton
+          className="btn btn-primary btn-block"
+          pendingText="Saving…"
+        >
           Save changes
-        </button>
+        </SubmitButton>
       </form>
 
       {member.status === "active" ? (
@@ -90,10 +120,15 @@ export default async function MemberPage({
           <h2 className="section-title">Her personal link</h2>
           <div className="card stack">
             <p className="small muted">
-              She taps the link once and is signed in on her phone, with no password. Making a new link stops her old one
-              from working.
+              She taps the link once and is signed in on her phone, with no
+              password. Making a new link stops her old one from working.
             </p>
-            <LoginLinkButton memberId={member.id} label={member.phone ? "Send her a link on WhatsApp" : "Make her a link"} />
+            <LoginLinkButton
+              memberId={member.id}
+              label={
+                member.phone ? "Send her a link on WhatsApp" : "Make her a link"
+              }
+            />
           </div>
         </>
       ) : null}
@@ -108,7 +143,8 @@ export default async function MemberPage({
               <div className="grow">
                 <div className="name">{monthName(s.month)}</div>
                 <div className="sub">
-                  {s.sessions_per_week} a week, {s.method === "cash" ? "cash" : "bank transfer"}
+                  {s.sessions_per_week} a week,{" "}
+                  {s.method === "cash" ? "cash" : "bank transfer"}
                   {s.status === "pending" ? ", pending" : ""}
                 </div>
               </div>
@@ -127,7 +163,8 @@ export default async function MemberPage({
             <li key={v.id} className="row-main" style={{ minHeight: 56 }}>
               <div className="grow">
                 <div className="name">
-                  {formatDate(v.sessions.session_date)}, {formatTime(v.sessions.start_time)}
+                  {formatDate(v.sessions.session_date)},{" "}
+                  {formatTime(v.sessions.start_time)}
                 </div>
                 {v.flag ? (
                   <div className="sub warn">

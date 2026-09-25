@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { recordPayment } from "@/app/actions";
 import { pounds } from "@/lib/money";
+import { SubmitButton } from "@/components/SubmitButton";
 import type { Plan } from "@/lib/types";
 
 type Props = {
@@ -14,7 +15,9 @@ type Props = {
 
 export function PaymentForm({ members, plans, months, defaultMonth }: Props) {
   const [planId, setPlanId] = useState(plans[0]?.id ?? "");
-  const [amount, setAmount] = useState(plans[0] ? String(plans[0].price_pence / 100) : "");
+  const [amount, setAmount] = useState(
+    plans[0] ? String(plans[0].price_pence / 100) : "",
+  );
 
   function choosePlan(id: string) {
     setPlanId(id);
@@ -39,7 +42,13 @@ export function PaymentForm({ members, plans, months, defaultMonth }: Props) {
       </div>
       <div className="field">
         <label htmlFor="planId">Plan</label>
-        <select id="planId" name="planId" value={planId} onChange={(e) => choosePlan(e.target.value)} required>
+        <select
+          id="planId"
+          name="planId"
+          value={planId}
+          onChange={(e) => choosePlan(e.target.value)}
+          required
+        >
           {plans.map((p) => (
             <option key={p.id} value={p.id}>
               {p.name}, {pounds(p.price_pence)} a month
@@ -77,9 +86,13 @@ export function PaymentForm({ members, plans, months, defaultMonth }: Props) {
           required
         />
       </div>
-      <button type="submit" className="btn btn-primary btn-block" style={{ minHeight: 52 }}>
+      <SubmitButton
+        className="btn btn-primary btn-block"
+        style={{ minHeight: 52 }}
+        pendingText="Recording…"
+      >
         Record payment
-      </button>
+      </SubmitButton>
     </form>
   );
 }

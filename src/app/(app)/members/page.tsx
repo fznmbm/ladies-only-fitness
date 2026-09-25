@@ -12,9 +12,11 @@ import { addMember } from "@/app/actions";
 import { whatsappUrl } from "@/lib/phone";
 import { Avatar } from "@/components/Avatar";
 import { Icon } from "@/components/Icon";
+import { SubmitButton } from "@/components/SubmitButton";
 import { PageHead } from "@/components/PageHead";
 import { RequestRow } from "@/components/LoginLink";
 import { AutoRefresh } from "@/components/AutoRefresh";
+import { ShareToWhatsApp } from "@/components/ShareToWhatsApp";
 import type { Member, Subscription } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
@@ -179,9 +181,12 @@ export default async function MembersPage({
                 placeholder="07… or +94…"
               />
             </div>
-            <button type="submit" className="btn btn-primary btn-block">
+            <SubmitButton
+              className="btn btn-primary btn-block"
+              pendingText="Adding…"
+            >
               Add member
-            </button>
+            </SubmitButton>
           </form>
         </details>
 
@@ -266,14 +271,14 @@ export default async function MembersPage({
                       ) : null}
                     </Link>
                     {wa ? (
-                      <a
-                        href={wa}
-                        target="_blank"
-                        rel="noopener noreferrer"
+                      <ShareToWhatsApp
+                        text={messageFor(m)}
+                        phone={m.phone}
                         className="btn btn-outline btn-small"
+                        copiedLabel="Copied"
                       >
                         <Icon name="send" size={18} /> Message
-                      </a>
+                      </ShareToWhatsApp>
                     ) : null}
                   </div>
                 </li>

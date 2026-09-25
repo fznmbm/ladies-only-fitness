@@ -6,6 +6,7 @@ import { confirmPayment, voidPayment } from "@/app/actions";
 import { receiptViewUrl } from "@/lib/b2";
 import { Icon } from "@/components/Icon";
 import { PageHead } from "@/components/PageHead";
+import { SubmitButton } from "@/components/SubmitButton";
 import type { Member, Plan } from "@/lib/types";
 import { PaymentForm } from "./PaymentForm";
 
@@ -198,21 +199,21 @@ export default async function PaymentsPage({
                   >
                     <form action={confirmPayment} style={{ flex: 1 }}>
                       <input type="hidden" name="id" value={s.id} />
-                      <button
-                        type="submit"
+                      <SubmitButton
                         className="btn btn-primary btn-block"
+                        pendingText="Confirming…"
                       >
                         <Icon name="check" size={18} /> Confirm
-                      </button>
+                      </SubmitButton>
                     </form>
                     <form action={voidPayment} style={{ flex: 1 }}>
                       <input type="hidden" name="id" value={s.id} />
-                      <button
-                        type="submit"
+                      <SubmitButton
                         className="btn btn-outline btn-block"
+                        pendingText="Saving…"
                       >
                         Not received
-                      </button>
+                      </SubmitButton>
                     </form>
                   </div>
                 </div>
@@ -242,13 +243,12 @@ export default async function PaymentsPage({
                 <div className="name">{pounds(s.price_pence)}</div>
                 <form action={voidPayment}>
                   <input type="hidden" name="id" value={s.id} />
-                  <button
-                    type="submit"
+                  <SubmitButton
                     className="btn btn-quiet btn-small"
                     aria-label={`Remove payment from ${s.members?.name ?? "this lady"}`}
                   >
                     <Icon name="x" size={18} />
-                  </button>
+                  </SubmitButton>
                 </form>
               </li>
             ))}
