@@ -8,6 +8,9 @@ type InstallEvent = Event & {
   userChoice: Promise<{ outcome: string }>;
 };
 
+// Set by the small script in the root layout, which catches the offer early.
+type WithInstall = Window & { __installEvent?: InstallEvent | null };
+
 export function InstallHint() {
   const [event, setEvent] = useState<InstallEvent | null>(null);
   const [installed, setInstalled] = useState(false);
@@ -20,12 +23,11 @@ export function InstallHint() {
     setInstalled(standalone);
     setIos(/iphone|ipad|ipod/i.test(navigator.userAgent));
 
-    const onPrompt = (e: Event) => {
-      e.preventDefault();
-      setEvent(e as InstallEvent);
-    };
-    window.addEventListener("beforeinstallprompt", onPrompt);
-    return () => window.removeEventListener("beforeinstallprompt", onPrompt);
+    const w = window as WithInstall;
+    const sync = () => setEvent(w.__installEvent ?? null);
+    sync(); // The offer may already have arrived before this button appeared.
+    window.addEventListener("installready", sync);
+    return () => window.removeEventListener("installready", sync);
   }, []);
 
   if (installed) return null;
@@ -38,8 +40,11 @@ export function InstallHint() {
         style={{ minHeight: 52 }}
         onClick={async () => {
           await event.prompt();
-          await event.userChoice;
+          const { outcome } = await event.userChoice;
+          // Chrome only offers once per page load, so clear it either way.
+          (window as WithInstall).__installEvent = null;
           setEvent(null);
+          if (outcome === "accepted") setInstalled(true);
         }}
       >
         <Icon name="plus" /> Add to your home screen
@@ -52,8 +57,8 @@ export function InstallHint() {
       <Icon name="plus" />
       <span>
         {ios
-          ? "To keep this on your phone: tap the Share button in Safari, then Add to Home Screen."
-          : "To keep this on your phone: open the browser menu, then choose Install app or Add to Home screen."}
+          ? "To keep this on your phone: open this page in Safari (if you came from WhatsApp, tap the Safari compass first), then tap Share, then Add to Home Screen."
+          : "To keep this on your phone: open this page in Chrome (if you came from WhatsApp, tap ⋮ then Open in Chrome first), then tap ⋮ and choose Add to Home screen or Install app."}
       </span>
     </div>
   );

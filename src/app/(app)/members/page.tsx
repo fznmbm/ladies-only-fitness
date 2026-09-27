@@ -14,7 +14,7 @@ import { Avatar } from "@/components/Avatar";
 import { Icon } from "@/components/Icon";
 import { SubmitButton } from "@/components/SubmitButton";
 import { PageHead } from "@/components/PageHead";
-import { RequestRow } from "@/components/LoginLink";
+import { JoinRequests } from "@/components/LoginLink";
 import { AutoRefresh } from "@/components/AutoRefresh";
 import { ShareToWhatsApp } from "@/components/ShareToWhatsApp";
 import type { Member, Subscription } from "@/lib/types";
@@ -41,31 +41,30 @@ export default async function MembersPage({
   const month = monthStart(today);
   const nextMonth = addMonths(month, 1);
 
-  const [membersRes, subsRes, pastRes, attRes, pendingRes] = await Promise.all([
-    supabase.from("members").select("*").eq("status", "active").order("name"),
-    supabase
-      .from("subscriptions")
-      .select("*")
-      .in("month", [month, nextMonth])
-      .in("status", ["pending", "confirmed"]),
-    supabase
-      .from("sessions")
-      .select("id")
-      .lte("session_date", today)
-      .eq("cancelled", false)
-      .order("session_date", { ascending: false })
-      .order("start_time", { ascending: false })
-      .limit(3),
-    supabase
-      .from("attendance")
-      .select("member_id, session_id, resolution, sessions!inner(session_date)")
-      .gte("sessions.session_date", addDays(today, -90)),
-    supabase
-      .from("members")
-      .select("*")
-      .eq("status", "pending")
-      .order("created_at"),
-  ]);
+  const [membersRes, subsRes, pastRes, activityRes, pendingRes] =
+    await Promise.all([
+      supabase.from("members").select("*").eq("status", "active").order("name"),
+      supabase
+        .from("subscriptions")
+        .select("*")
+        .in("month", [month, nextMonth])
+        .in("status", ["pending", "confirmed"]),
+      supabase
+        .from("sessions")
+        .select("id")
+        .lte("session_date", today)
+        .eq("cancelled", false)
+        .order("session_date", { ascending: false })
+        .order("start_time", { ascending: false })
+        .limit(3),
+      // One line per lady, worked out in the database (migration 005).
+      supabase.rpc("member_activity", { p_today: today }),
+      supabase
+        .from("members")
+        .select("*")
+        .eq("status", "pending")
+        .order("created_at"),
+    ]);
   const pending = (pendingRes.data ?? []) as Member[];
 
   const members = (membersRes.data ?? []) as Member[];
@@ -73,11 +72,11 @@ export default async function MembersPage({
   const pastIds = new Set(
     ((pastRes.data ?? []) as { id: string }[]).map((s) => s.id),
   );
-  const att = (attRes.data ?? []) as unknown as {
+  const activity = (activityRes.data ?? []) as {
     member_id: string;
-    session_id: string;
-    resolution: string | null;
-    sessions: { session_date: string };
+    last_came: string | null;
+    owes: number;
+    recent: boolean;
   }[];
 
   const thisMonth = new Map<string, Subscription>();
@@ -90,13 +89,10 @@ export default async function MembersPage({
   const lastCame = new Map<string, string>();
   const recent = new Set<string>();
   const owes = new Map<string, number>();
-  for (const a of att) {
-    const d = a.sessions.session_date;
-    if (!lastCame.has(a.member_id) || d > (lastCame.get(a.member_id) as string))
-      lastCame.set(a.member_id, d);
-    if (pastIds.has(a.session_id)) recent.add(a.member_id);
-    if (a.resolution === "pay_later")
-      owes.set(a.member_id, (owes.get(a.member_id) ?? 0) + 1);
+  for (const a of activity) {
+    if (a.last_came) lastCame.set(a.member_id, a.last_came);
+    if (a.recent) recent.add(a.member_id);
+    if (a.owes > 0) owes.set(a.member_id, a.owes);
   }
 
   const canJudgeSeen = pastIds.size >= 3;
@@ -148,18 +144,13 @@ export default async function MembersPage({
         </div>
       ) : null}
 
-      {pending.length > 0 ? (
-        <section style={{ marginBottom: 20 }}>
-          <h2 className="section-title" style={{ marginTop: 0 }}>
-            Asking to join {pending.length}
-          </h2>
-          <ul className="list">
-            {pending.map((r) => (
-              <RequestRow key={r.id} id={r.id} name={r.name} phone={r.phone} />
-            ))}
-          </ul>
-        </section>
-      ) : null}
+      <JoinRequests
+        requests={pending.map((r) => ({
+          id: r.id,
+          name: r.name,
+          phone: r.phone,
+        }))}
+      />
 
       <div className="stack">
         <details className="details">
@@ -262,7 +253,7 @@ export default async function MembersPage({
                       <div className="sub">
                         {last
                           ? `Last came ${formatDate(last)}`
-                          : "No visits in the last 90 days"}
+                          : "No visits yet"}
                       </div>
                       {owed > 0 ? (
                         <div className="sub bad">

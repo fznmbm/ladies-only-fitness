@@ -1,6 +1,7 @@
 import {
   DeleteObjectCommand,
   GetObjectCommand,
+  ListObjectVersionsCommand,
   PutObjectCommand,
   S3Client,
 } from "@aws-sdk/client-s3";
@@ -79,4 +80,41 @@ export async function receiptViewUrl(key: string): Promise<string> {
 
 export async function deleteReceipt(key: string): Promise<void> {
   await client().send(new DeleteObjectCommand({ Bucket: bucket(), Key: key }));
+}
+
+/**
+ * Permanently removes every receipt photo a lady ever uploaded, including any
+ * left behind by a failed payment. B2 keeps old copies of files, so each copy
+ * is removed by its version, otherwise the photo would only be hidden.
+ */
+export async function deleteMemberReceipts(memberId: string): Promise<number> {
+  const s3 = client();
+  const Bucket = bucket();
+  const Prefix = `receipts/${memberId}/`;
+  let removed = 0;
+  let KeyMarker: string | undefined;
+  let VersionIdMarker: string | undefined;
+
+  do {
+    const page = await s3.send(
+      new ListObjectVersionsCommand({
+        Bucket,
+        Prefix,
+        KeyMarker,
+        VersionIdMarker,
+      }),
+    );
+    const copies = [...(page.Versions ?? []), ...(page.DeleteMarkers ?? [])];
+    for (const c of copies) {
+      if (!c.Key?.startsWith(Prefix)) continue; // Never touch anyone else's files.
+      await s3.send(
+        new DeleteObjectCommand({ Bucket, Key: c.Key, VersionId: c.VersionId }),
+      );
+      removed++;
+    }
+    KeyMarker = page.IsTruncated ? page.NextKeyMarker : undefined;
+    VersionIdMarker = page.IsTruncated ? page.NextVersionIdMarker : undefined;
+  } while (KeyMarker);
+
+  return removed;
 }

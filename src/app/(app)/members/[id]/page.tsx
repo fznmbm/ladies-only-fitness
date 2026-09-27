@@ -3,7 +3,7 @@ import { notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { formatDate, formatTime, monthName } from "@/lib/dates";
 import { pounds } from "@/lib/money";
-import { updateMember } from "@/app/actions";
+import { deleteMember, updateMember } from "@/app/actions";
 import { Icon } from "@/components/Icon";
 import { PageHead } from "@/components/PageHead";
 import { SubmitButton } from "@/components/SubmitButton";
@@ -23,30 +23,30 @@ export default async function MemberPage({
   const { error } = await searchParams;
   const supabase = await createClient();
 
-  const { data: memberRow } = await supabase
-    .from("members")
-    .select("*")
-    .eq("id", id)
-    .maybeSingle();
+  // All three at once, instead of one after another.
+  const [{ data: memberRow }, { data: subsData }, { data: attData }] =
+    await Promise.all([
+      supabase.from("members").select("*").eq("id", id).maybeSingle(),
+      supabase
+        .from("subscriptions")
+        .select("*")
+        .eq("member_id", id)
+        .neq("status", "rejected")
+        .order("month", { ascending: false })
+        .limit(12),
+      supabase
+        .from("attendance")
+        .select(
+          "id, flag, resolution, extra_paid_pence, sessions(session_date, start_time)",
+        )
+        .eq("member_id", id)
+        // Newest first in the database, so the 20 shown really are the latest.
+        .order("sessions(session_date)", { ascending: false })
+        .order("sessions(start_time)", { ascending: false })
+        .limit(20),
+    ]);
   if (!memberRow) notFound();
   const member = memberRow as Member;
-
-  const [{ data: subsData }, { data: attData }] = await Promise.all([
-    supabase
-      .from("subscriptions")
-      .select("*")
-      .eq("member_id", id)
-      .neq("status", "rejected")
-      .order("month", { ascending: false })
-      .limit(12),
-    supabase
-      .from("attendance")
-      .select(
-        "id, flag, resolution, extra_paid_pence, sessions(session_date, start_time)",
-      )
-      .eq("member_id", id)
-      .limit(60),
-  ]);
 
   const subs = (subsData ?? []) as Subscription[];
   const visits = (
@@ -186,6 +186,32 @@ export default async function MemberPage({
           ))}
         </ul>
       )}
+
+      <details className="details" style={{ marginTop: 28 }}>
+        <summary>Delete this member</summary>
+        <form action={deleteMember} className="stack">
+          <input type="hidden" name="id" value={member.id} />
+          <p className="small muted">
+            This removes {member.name} completely: her payments, visits and
+            receipt photos. It can&apos;t be undone. If she has just stopped
+            coming, set her to &ldquo;No longer attending&rdquo; above instead,
+            which keeps her history.
+          </p>
+          <label
+            className="cluster"
+            style={{ alignItems: "center", flexWrap: "nowrap" }}
+          >
+            <input type="checkbox" name="confirm" value="yes" required />
+            <span>Yes, delete {member.name} for good</span>
+          </label>
+          <SubmitButton
+            className="btn btn-danger btn-block"
+            pendingText="Deleting…"
+          >
+            Delete member
+          </SubmitButton>
+        </form>
+      </details>
     </>
   );
 }

@@ -476,6 +476,42 @@ input[type="checkbox"] {
   padding: 64px 20px;
 }
 
+/* ---------- Loading placeholders ---------- */
+.skel {
+  background: var(--sand);
+  border-radius: 10px;
+  animation: skel-pulse 1.4s ease-in-out infinite;
+}
+.skel-line {
+  height: 14px;
+}
+.skel-title {
+  height: 30px;
+  width: 55%;
+  margin-top: 6px;
+}
+.skel-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px;
+  min-height: 72px;
+}
+.skel-row + .skel-row {
+  border-top: 1px solid var(--line);
+}
+.skel-avatar {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+@keyframes skel-pulse {
+  50% {
+    opacity: 0.5;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   * {
     scroll-behavior: auto !important;

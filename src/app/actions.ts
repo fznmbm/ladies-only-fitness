@@ -15,6 +15,7 @@ import { toPence } from "@/lib/money";
 import { groupName, siteOrigin } from "@/lib/config";
 import { hashToken, newToken } from "@/lib/memberAuth";
 import { whatsappUrl } from "@/lib/phone";
+import { deleteMemberReceipts } from "@/lib/b2";
 import type { Plan } from "@/lib/types";
 
 function refresh() {
@@ -262,6 +263,46 @@ export async function updateMember(formData: FormData) {
   if (error)
     redirect(`/members/${id}?error=` + encodeURIComponent(error.message));
   refresh();
+}
+
+/**
+ * Deletes a lady for good: her details, payments, visits and RSVPs (the database
+ * removes those with her), then her receipt photos from B2.
+ * For someone who has just stopped coming, "No longer attending" is usually better,
+ * because it keeps her payment history.
+ */
+export async function deleteMember(formData: FormData) {
+  const supabase = await createClient();
+  const id = str(formData, "id");
+  if (!id || str(formData, "confirm") !== "yes")
+    redirect(
+      `/members/${id}?error=` +
+        encodeURIComponent("Tick the box to confirm before deleting."),
+    );
+
+  const { data: deleted, error } = await supabase
+    .from("members")
+    .delete()
+    .eq("id", id)
+    .select("id");
+  if (error)
+    redirect(`/members/${id}?error=` + encodeURIComponent(error.message));
+  if (!deleted || deleted.length === 0)
+    redirect(
+      "/members?error=" +
+        encodeURIComponent("That member was already removed."),
+    );
+
+  // Her record is gone, so do the photos now. If B2 fails, the photos are only
+  // reachable with the organiser's keys, so don't stop the delete over it.
+  try {
+    await deleteMemberReceipts(id);
+  } catch (e) {
+    console.error("Couldn't remove receipts for deleted member", id, e);
+  }
+
+  refresh();
+  redirect("/members");
 }
 
 // ---------- Payments ----------
