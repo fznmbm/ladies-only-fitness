@@ -11,6 +11,7 @@ import { signOut } from "@/app/login/actions";
 import { Icon } from "@/components/Icon";
 import { PageHead } from "@/components/PageHead";
 import { SubmitButton } from "@/components/SubmitButton";
+import { ConfirmSubmit } from "@/components/ConfirmSubmit";
 import { InstallHint } from "@/components/InstallHint";
 import { ShareToWhatsApp } from "@/components/ShareToWhatsApp";
 import { groupName, joinLink, siteOrigin } from "@/lib/config";
@@ -220,12 +221,13 @@ export default async function SettingsPage() {
               </div>
               <form action={deleteSlot}>
                 <input type="hidden" name="id" value={s.id} />
-                <SubmitButton
+                <ConfirmSubmit
                   className="btn btn-quiet btn-small"
                   aria-label={`Remove ${WEEKDAYS[s.weekday - 1]} ${formatTime(s.start_time)}`}
+                  confirm={`Remove ${WEEKDAYS[s.weekday - 1]} ${formatTime(s.start_time)} from the weekly timetable? Sessions already created stay as they are.`}
                 >
                   <Icon name="x" size={18} />
-                </SubmitButton>
+                </ConfirmSubmit>
               </form>
             </li>
           ))}

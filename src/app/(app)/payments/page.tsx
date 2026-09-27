@@ -7,6 +7,7 @@ import { receiptViewUrl } from "@/lib/b2";
 import { Icon } from "@/components/Icon";
 import { PageHead } from "@/components/PageHead";
 import { SubmitButton } from "@/components/SubmitButton";
+import { ConfirmSubmit } from "@/components/ConfirmSubmit";
 import type { Member, Plan } from "@/lib/types";
 import { PaymentForm } from "./PaymentForm";
 
@@ -243,12 +244,13 @@ export default async function PaymentsPage({
                 <div className="name">{pounds(s.price_pence)}</div>
                 <form action={voidPayment}>
                   <input type="hidden" name="id" value={s.id} />
-                  <SubmitButton
+                  <ConfirmSubmit
                     className="btn btn-quiet btn-small"
                     aria-label={`Remove payment from ${s.members?.name ?? "this lady"}`}
+                    confirm={`Remove ${s.members?.name ?? "this lady"}'s ${pounds(s.price_pence)} payment? She'll show as not paid for this month.`}
                   >
                     <Icon name="x" size={18} />
-                  </SubmitButton>
+                  </ConfirmSubmit>
                 </form>
               </li>
             ))}

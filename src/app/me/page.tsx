@@ -29,7 +29,30 @@ function joinList(items: string[]): string {
 }
 
 export default async function MePage() {
-  const member = await getMember();
+  const admin = createAdminClient();
+  const today = todayISO();
+  const month = monthStart(today);
+  const ws = weekStart(today);
+
+  // Round 1: who she is, this week's sessions and the plans, all at once.
+  const [member, { data: weekSessionsData }, { data: plansData }] =
+    await Promise.all([
+      getMember(),
+      admin
+        .from("sessions")
+        .select("*")
+        .gte("session_date", ws)
+        .lte("session_date", addDays(ws, 6))
+        .eq("cancelled", false)
+        .order("session_date")
+        .order("start_time"),
+      admin
+        .from("plans")
+        .select("*")
+        .eq("active", true)
+        .order("sort")
+        .order("sessions_per_week"),
+    ]);
 
   if (!member) {
     return (
@@ -43,12 +66,12 @@ export default async function MePage() {
     );
   }
 
-  const admin = createAdminClient();
-  const today = todayISO();
-  const month = monthStart(today);
-  const ws = weekStart(today);
+  const weekSessions = (weekSessionsData ?? []) as Session[];
+  const weekIds = weekSessions.map((s) => s.id);
+  const plans = (plansData ?? []) as Plan[];
 
-  const [{ data: subData }, { data: weekSessionsData }] = await Promise.all([
+  // Round 2: her plan, her visits and her RSVPs this week, all at once.
+  const [{ data: subData }, { count }, { data: rsvpData }] = await Promise.all([
     admin
       .from("subscriptions")
       .select("*")
@@ -56,52 +79,29 @@ export default async function MePage() {
       .eq("month", month)
       .in("status", ["pending", "confirmed"])
       .maybeSingle(),
-    admin
-      .from("sessions")
-      .select("*")
-      .gte("session_date", ws)
-      .lte("session_date", addDays(ws, 6))
-      .eq("cancelled", false)
-      .order("session_date")
-      .order("start_time"),
+    weekIds.length > 0
+      ? admin
+          .from("attendance")
+          .select("id", { count: "exact", head: true })
+          .eq("member_id", member.id)
+          .in("session_id", weekIds)
+      : Promise.resolve({ count: 0 as number | null }),
+    weekIds.length > 0
+      ? admin
+          .from("rsvps")
+          .select("*")
+          .eq("member_id", member.id)
+          .in("session_id", weekIds)
+      : Promise.resolve({ data: [] as Rsvp[] }),
   ]);
 
   const sub = (subData ?? null) as Subscription | null;
-  const weekSessions = (weekSessionsData ?? []) as Session[];
-  const weekIds = weekSessions.map((s) => s.id);
-
-  let used = 0;
-  let rsvpBySession = new Map<string, boolean>();
-  if (weekIds.length > 0) {
-    const [{ count }, { data: rsvpData }] = await Promise.all([
-      sub
-        ? admin
-            .from("attendance")
-            .select("id", { count: "exact", head: true })
-            .eq("member_id", member.id)
-            .in("session_id", weekIds)
-        : Promise.resolve({ count: 0 as number | null }),
-      admin
-        .from("rsvps")
-        .select("*")
-        .eq("member_id", member.id)
-        .in("session_id", weekIds),
-    ]);
-    used = count ?? 0;
-    rsvpBySession = new Map(
-      ((rsvpData ?? []) as Rsvp[]).map((r) => [r.session_id, r.coming]),
-    );
-  }
+  const used = sub ? (count ?? 0) : 0;
+  const rsvpBySession = new Map(
+    ((rsvpData ?? []) as Rsvp[]).map((r) => [r.session_id, r.coming]),
+  );
 
   const sessions = weekSessions.filter((s) => s.session_date >= today);
-
-  const { data: plansData } = await admin
-    .from("plans")
-    .select("*")
-    .eq("active", true)
-    .order("sort")
-    .order("sessions_per_week");
-  const plans = (plansData ?? []) as Plan[];
 
   const bank = {
     name: process.env.BANK_ACCOUNT_NAME || "[Account name]",

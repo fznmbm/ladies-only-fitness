@@ -78,8 +78,20 @@ export async function receiptViewUrl(key: string): Promise<string> {
   );
 }
 
+/** Permanently removes one receipt photo, including B2's older copies of it. */
 export async function deleteReceipt(key: string): Promise<void> {
-  await client().send(new DeleteObjectCommand({ Bucket: bucket(), Key: key }));
+  const s3 = client();
+  const Bucket = bucket();
+  const page = await s3.send(
+    new ListObjectVersionsCommand({ Bucket, Prefix: key }),
+  );
+  const copies = [...(page.Versions ?? []), ...(page.DeleteMarkers ?? [])];
+  for (const c of copies) {
+    if (c.Key !== key) continue; // Only this exact file.
+    await s3.send(
+      new DeleteObjectCommand({ Bucket, Key: key, VersionId: c.VersionId }),
+    );
+  }
 }
 
 /**

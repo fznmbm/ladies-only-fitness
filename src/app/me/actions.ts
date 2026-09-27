@@ -3,7 +3,8 @@
 import { revalidatePath } from "next/cache";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getMember } from "@/lib/memberAuth";
-import { uploadReceipt } from "@/lib/b2";
+import { deleteReceipt, uploadReceipt } from "@/lib/b2";
+import { addMonths, monthStart, todayISO } from "@/lib/dates";
 import type { Plan } from "@/lib/types";
 
 /** A lady tapping "I'm coming" or "Can't make it" on her own page. */
@@ -63,8 +64,10 @@ export async function payForMonth(
   const month = String(formData.get("month") ?? "");
   const receipt = formData.get("receipt");
 
-  if (!/^\d{4}-\d{2}-01$/.test(month))
-    return { error: "Something went wrong. Please try again." };
+  // Only this month or next, the same two choices the form offers.
+  const thisMonth = monthStart(todayISO());
+  if (month !== thisMonth && month !== addMonths(thisMonth, 1))
+    return { error: "Please reload the page and try again." };
   if (!(receipt instanceof File) || receipt.size === 0) {
     return { error: "Please choose a photo of your receipt." };
   }
@@ -80,13 +83,28 @@ export async function payForMonth(
   }
 
   const admin = createAdminClient();
-  const { data: plan } = await admin
-    .from("plans")
-    .select("*")
-    .eq("id", planId)
-    .eq("active", true)
-    .maybeSingle();
+  // Check the plan, and that she hasn't already paid for that month,
+  // before uploading anything, so no photo is stored for nothing.
+  const [{ data: plan }, { data: existing }] = await Promise.all([
+    admin
+      .from("plans")
+      .select("*")
+      .eq("id", planId)
+      .eq("active", true)
+      .maybeSingle(),
+    admin
+      .from("subscriptions")
+      .select("id")
+      .eq("member_id", member.id)
+      .eq("month", month)
+      .in("status", ["pending", "confirmed"])
+      .limit(1),
+  ]);
   if (!plan) return { error: "Please choose a plan." };
+  if (existing && existing.length > 0)
+    return {
+      error: "You already have a payment for that month, waiting or confirmed.",
+    };
   const p = plan as Plan;
 
   let receiptPath: string;
@@ -110,6 +128,8 @@ export async function payForMonth(
     receipt_path: receiptPath,
   });
   if (error) {
+    // Nothing was saved, so don't keep the photo either.
+    await deleteReceipt(receiptPath).catch(() => {});
     if (error.message.includes("subscriptions_one_per_month")) {
       return {
         error:

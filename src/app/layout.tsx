@@ -1,5 +1,21 @@
 import type { Metadata, Viewport } from "next";
+import { DM_Sans, Fraunces } from "next/font/google";
 import "./globals.css";
+
+// Fonts are downloaded once at build time and served from this site, so the
+// first screen no longer waits on Google.
+const sans = DM_Sans({
+  subsets: ["latin"],
+  weight: ["400", "500", "700"],
+  display: "swap",
+  variable: "--font-sans",
+});
+const display = Fraunces({
+  subsets: ["latin"],
+  axes: ["opsz"],
+  display: "swap",
+  variable: "--font-display",
+});
 
 export const metadata: Metadata = {
   title: "Ladies Fitness",
@@ -26,18 +42,8 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en-GB">
+    <html lang="en-GB" className={`${sans.variable} ${display.variable}`}>
       <head>
-        <link rel="preconnect" href="https://fonts.googleapis.com" />
-        <link
-          rel="preconnect"
-          href="https://fonts.gstatic.com"
-          crossOrigin=""
-        />
-        <link
-          href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;700&family=Fraunces:opsz,wght@9..144,600&display=swap"
-          rel="stylesheet"
-        />
         {/* Catch the "install this app" offer as soon as Chrome makes it, before the page has
             finished loading. The Add to home screen button picks it up from here. */}
         <script

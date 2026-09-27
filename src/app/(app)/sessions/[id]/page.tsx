@@ -24,6 +24,7 @@ import { Avatar } from "@/components/Avatar";
 import { Icon } from "@/components/Icon";
 import { PageHead } from "@/components/PageHead";
 import { SubmitButton } from "@/components/SubmitButton";
+import { ConfirmSubmit } from "@/components/ConfirmSubmit";
 import type {
   Attendance,
   Member,
@@ -149,44 +150,40 @@ export default async function RegisterPage({
   const { q } = await searchParams;
   const supabase = await createClient();
 
-  const { data: sessionRow } = await supabase
-    .from("sessions")
-    .select("*")
-    .eq("id", id)
-    .maybeSingle();
-  if (!sessionRow) notFound();
-  const session = sessionRow as Session;
-
-  const ws = weekStart(session.session_date);
+  // Round 1: the session, the ladies, the plans and who said they're coming, all at once.
   const [
+    { data: sessionRow },
     { data: membersData },
-    { data: subsData },
-    { data: weekSessions },
     { data: plansData },
+    { data: rsvpData },
   ] = await Promise.all([
+    supabase.from("sessions").select("*").eq("id", id).maybeSingle(),
     supabase.from("members").select("*").eq("status", "active").order("name"),
-    supabase
-      .from("subscriptions")
-      .select("*")
-      .eq("month", monthStart(session.session_date))
-      .in("status", ["pending", "confirmed"]),
-    supabase
-      .from("sessions")
-      .select("id")
-      .gte("session_date", ws)
-      .lte("session_date", addDays(ws, 6)),
     supabase
       .from("plans")
       .select("*")
       .eq("active", true)
       .order("sort")
       .order("sessions_per_week"),
+    supabase.from("rsvps").select("member_id, coming").eq("session_id", id),
   ]);
+  if (!sessionRow) notFound();
+  const session = sessionRow as Session;
 
-  const weekIds = ((weekSessions ?? []) as { id: string }[]).map((s) => s.id);
-  const { data: attData } = weekIds.length
-    ? await supabase.from("attendance").select("*").in("session_id", weekIds)
-    : { data: [] };
+  // Round 2: that month's plans and that week's visits, all at once.
+  const ws = weekStart(session.session_date);
+  const [{ data: subsData }, { data: attData }] = await Promise.all([
+    supabase
+      .from("subscriptions")
+      .select("*")
+      .eq("month", monthStart(session.session_date))
+      .in("status", ["pending", "confirmed"]),
+    supabase
+      .from("attendance")
+      .select("*, sessions!inner(session_date)")
+      .gte("sessions.session_date", ws)
+      .lte("sessions.session_date", addDays(ws, 6)),
+  ]);
 
   const members = (membersData ?? []) as Member[];
   const plans = (plansData ?? []) as Plan[];
@@ -197,6 +194,15 @@ export default async function RegisterPage({
   for (const a of (attData ?? []) as Attendance[]) {
     attByMember.set(a.member_id, [...(attByMember.get(a.member_id) ?? []), a]);
   }
+
+  // What each lady said on her own page: true = coming, false = can't make it.
+  const said = new Map(
+    ((rsvpData ?? []) as { member_id: string; coming: boolean }[]).map((r) => [
+      r.member_id,
+      r.coming,
+    ]),
+  );
+  const comingCount = members.filter((m) => said.get(m.id) === true).length;
 
   const term = (q ?? "").trim().toLowerCase();
   const shown = members.filter(
@@ -223,6 +229,9 @@ export default async function RegisterPage({
       >
         <div className="cluster" style={{ marginTop: 12 }}>
           <span className="chip chip-solid">{hereCount} here</span>
+          {comingCount > 0 ? (
+            <span className="chip">{comingCount} said coming</span>
+          ) : null}
           {undecided > 0 ? (
             <span className="chip chip-warn">{undecided} to decide</span>
           ) : null}
@@ -270,6 +279,14 @@ export default async function RegisterPage({
                     >
                       {line.text}
                     </div>
+                    {!here && said.get(m.id) === true ? (
+                      <div className="sub">Said she&apos;s coming</div>
+                    ) : null}
+                    {!here && said.get(m.id) === false ? (
+                      <div className="sub muted">
+                        Said she can&apos;t make it
+                      </div>
+                    ) : null}
                   </div>
                   <form action={toggleHere}>
                     <Hidden name="sessionId" value={id} />
@@ -362,14 +379,22 @@ export default async function RegisterPage({
             name="cancelled"
             value={session.cancelled ? "false" : "true"}
           />
-          <SubmitButton
-            className="btn btn-quiet btn-block"
-            pendingText="Saving…"
-          >
-            {session.cancelled
-              ? "Bring this session back"
-              : "Cancel this session"}
-          </SubmitButton>
+          {session.cancelled ? (
+            <SubmitButton
+              className="btn btn-quiet btn-block"
+              pendingText="Saving…"
+            >
+              Bring this session back
+            </SubmitButton>
+          ) : (
+            <ConfirmSubmit
+              className="btn btn-quiet btn-block"
+              pendingText="Saving…"
+              confirm={`Cancel the ${formatTime(session.start_time)} session on ${formatDay(session.session_date)}? It will disappear from the ladies' page. Remember to tell them on WhatsApp.`}
+            >
+              Cancel this session
+            </ConfirmSubmit>
+          )}
         </form>
       </div>
     </>

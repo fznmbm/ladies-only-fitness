@@ -34,16 +34,23 @@ export default async function SessionsPage() {
 
   const sessions = (data ?? []) as Session[];
   const counts = new Map<string, number>();
+  const coming = new Map<string, number>();
   if (sessions.length > 0) {
-    const { data: att } = await supabase
-      .from("attendance")
-      .select("session_id")
-      .in(
-        "session_id",
-        sessions.map((s) => s.id),
-      );
+    const ids = sessions.map((s) => s.id);
+    // Who came, and who said "I'm coming", at the same time.
+    const [{ data: att }, { data: rsvps }] = await Promise.all([
+      supabase.from("attendance").select("session_id").in("session_id", ids),
+      supabase
+        .from("rsvps")
+        .select("session_id")
+        .eq("coming", true)
+        .in("session_id", ids),
+    ]);
     for (const a of (att ?? []) as { session_id: string }[]) {
       counts.set(a.session_id, (counts.get(a.session_id) ?? 0) + 1);
+    }
+    for (const r of (rsvps ?? []) as { session_id: string }[]) {
+      coming.set(r.session_id, (coming.get(r.session_id) ?? 0) + 1);
     }
   }
 
@@ -83,6 +90,7 @@ export default async function SessionsPage() {
                 <div className="stack" style={{ gap: 8 }}>
                   {list.map((s) => {
                     const came = counts.get(s.id) ?? 0;
+                    const said = coming.get(s.id) ?? 0;
                     const classes = [
                       "session-card",
                       isToday ? "today" : "",
@@ -102,8 +110,14 @@ export default async function SessionsPage() {
                         </span>
                         {s.cancelled ? (
                           <span className="chip chip-warn">Cancelled</span>
-                        ) : date <= today ? (
+                        ) : date < today ? (
                           <span className="chip">{came} here</span>
+                        ) : date === today ? (
+                          <span className="chip">
+                            {came} here{said > 0 ? `, ${said} coming` : ""}
+                          </span>
+                        ) : said > 0 ? (
+                          <span className="chip">{said} coming</span>
                         ) : null}
                       </Link>
                     );

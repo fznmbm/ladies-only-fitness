@@ -23,7 +23,7 @@ body {
   margin: 0;
   background: var(--bg);
   color: var(--ink);
-  font-family: "DM Sans", system-ui, sans-serif;
+  font-family: var(--font-sans), system-ui, sans-serif;
   font-size: 16px;
   line-height: 1.4;
 }
@@ -61,7 +61,7 @@ a {
   margin-bottom: 4px;
 }
 .title {
-  font-family: "Fraunces", Georgia, serif;
+  font-family: var(--font-display), Georgia, serif;
   font-weight: 600;
   font-size: 32px;
   line-height: 1.1;
@@ -400,7 +400,7 @@ input[type="checkbox"] {
   opacity: 0.6;
 }
 .time {
-  font-family: "Fraunces", Georgia, serif;
+  font-family: var(--font-display), Georgia, serif;
   font-weight: 600;
   font-size: 22px;
   line-height: 1;
@@ -533,7 +533,7 @@ input[type="checkbox"] {
   color: rgba(255, 255, 255, 0.85);
 }
 .plan-big {
-  font-family: "Fraunces", Georgia, serif;
+  font-family: var(--font-display), Georgia, serif;
   font-weight: 600;
   font-size: 36px;
   line-height: 1.1;

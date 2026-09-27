@@ -12,9 +12,12 @@ export default async function AppLayout({
   children: React.ReactNode;
 }) {
   const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  // The middleware has already checked the sign-in; this reads it without asking
+  // Supabase again. The staff lookup below is still protected by the database rules.
+  const { data } = await supabase.auth.getClaims();
+  const user = data?.claims
+    ? { id: data.claims.sub, email: data.claims.email }
+    : null;
   if (!user) redirect("/login");
 
   const { data: staff } = await supabase

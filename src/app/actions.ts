@@ -218,11 +218,52 @@ export async function addWalkIn(formData: FormData) {
   const supabase = await createClient();
   const sessionId = str(formData, "sessionId");
   const name = str(formData, "name");
-  if (!name) return;
+  const phone = str(formData, "phone") || null;
+  if (!name || !sessionId) return;
+
+  // Same number as someone already in the app? Mark her here under her existing
+  // name instead of adding her twice (which used to crash the page).
+  if (phone) {
+    const { data: existing } = await supabase
+      .from("members")
+      .select("id, status")
+      .eq("phone", phone)
+      .maybeSingle();
+    if (existing) {
+      if (existing.status !== "active") {
+        const { error } = await supabase
+          .from("members")
+          .update({
+            status: "active",
+            ...(existing.status === "pending"
+              ? { approved_at: new Date().toISOString() }
+              : {}),
+          })
+          .eq("id", existing.id);
+        check(error);
+      }
+      const { data: already } = await supabase
+        .from("attendance")
+        .select("id")
+        .eq("session_id", sessionId)
+        .eq("member_id", existing.id)
+        .maybeSingle();
+      if (!already) {
+        // Uses the same check as the "Here" button, so her plan is taken into account.
+        const { error } = await supabase.rpc("toggle_here", {
+          p_session_id: sessionId,
+          p_member_id: existing.id,
+        });
+        check(error);
+      }
+      refresh();
+      return;
+    }
+  }
 
   const { data: member, error } = await supabase
     .from("members")
-    .insert({ name, phone: str(formData, "phone") || null, status: "active" })
+    .insert({ name, phone, status: "active" })
     .select("id")
     .single();
   check(error);
