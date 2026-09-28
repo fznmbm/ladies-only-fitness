@@ -8,6 +8,7 @@ import { Icon } from "@/components/Icon";
 import { PageHead } from "@/components/PageHead";
 import { SubmitButton } from "@/components/SubmitButton";
 import { ConfirmSubmit } from "@/components/ConfirmSubmit";
+import { PaymentsTabs } from "@/components/PaymentsTabs";
 import { requireGroup } from "@/lib/groups";
 import type { Member, Plan } from "@/lib/types";
 import { PaymentForm } from "./PaymentForm";
@@ -29,7 +30,7 @@ export default async function PaymentsPage({
     await Promise.all([
       supabase
         .from("subscriptions")
-        .select("*, members(name)")
+        .select("*, members(name, pay_ref)")
         .eq("group_id", group.id)
         .eq("month", month)
         .in("status", ["pending", "confirmed"])
@@ -55,7 +56,7 @@ export default async function PaymentsPage({
     method: string;
     status: string;
     receipt_path: string | null;
-    members: { name: string } | null;
+    members: { name: string; pay_ref: string | null } | null;
   }[];
   const plans = (plansData ?? []) as Plan[];
   const members = (
@@ -97,6 +98,7 @@ export default async function PaymentsPage({
   return (
     <>
       <PageHead title="Payments" />
+      <PaymentsTabs active="payments" />
 
       {error ? (
         <div className="note warn" role="alert" style={{ marginBottom: 12 }}>
@@ -204,6 +206,11 @@ export default async function PaymentsPage({
                         {s.sessions_per_week} a week,{" "}
                         {s.method === "cash" ? "cash" : "bank transfer"}
                       </div>
+                      {s.members?.pay_ref ? (
+                        <div className="sub">
+                          Look for reference <strong>{s.members.pay_ref}</strong>
+                        </div>
+                      ) : null}
                       <div className="name" style={{ marginTop: 8 }}>
                         {pounds(s.price_pence)}
                       </div>

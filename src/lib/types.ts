@@ -24,6 +24,8 @@ export type Plan = {
 export type Member = {
   id: string;
   name: string;
+  /** Her own reference for bank transfers, e.g. AMINA-4821. */
+  pay_ref: string | null;
   phone: string | null;
   status: "pending" | "active" | "inactive";
   notes: string | null;
@@ -80,5 +82,30 @@ export type Rsvp = {
   session_id: string;
   member_id: string;
   coming: boolean;
+  created_at: string;
+};
+
+export const EXPENSE_CATEGORIES = {
+  hall: "Hall hire",
+  instructor: "Instructor",
+  music: "Music licence",
+  equipment: "Equipment",
+  marketing: "Advertising",
+  other: "Other",
+} as const;
+
+export type ExpenseCategory = keyof typeof EXPENSE_CATEGORIES;
+
+export type Expense = {
+  id: string;
+  /** Empty means the cost is shared by all groups. */
+  group_id: string | null;
+  category: ExpenseCategory;
+  description: string | null;
+  amount_pence: number;
+  paid_on: string;
+  covers_from: string;
+  covers_months: number;
+  receipt_path: string | null;
   created_at: string;
 };

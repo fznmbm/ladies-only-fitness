@@ -57,16 +57,30 @@ export async function uploadReceipt(
         ? "webp"
         : "jpg";
   const key = `receipts/${memberId}/${Date.now()}.${ext}`;
+  await putFile(key, bytes, file.type);
+  return key;
+}
+
+/** Stores a photo of a cost's receipt (hall hire and so on). */
+export async function uploadExpenseReceipt(file: File): Promise<string> {
+  const bytes = new Uint8Array(await file.arrayBuffer());
+  const ext =
+    file.type === "image/png" ? "png" : file.type === "image/webp" ? "webp" : "jpg";
+  const key = `expenses/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
+  await putFile(key, bytes, file.type);
+  return key;
+}
+
+async function putFile(key: string, bytes: Uint8Array, type: string) {
 
   await client().send(
     new PutObjectCommand({
       Bucket: bucket(),
       Key: key,
       Body: bytes,
-      ContentType: file.type || "application/octet-stream",
+      ContentType: type || "application/octet-stream",
     }),
   );
-  return key;
 }
 
 /** A link to view one receipt that stops working after a few minutes. */

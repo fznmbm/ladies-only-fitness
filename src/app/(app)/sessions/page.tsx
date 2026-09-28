@@ -145,8 +145,7 @@ export default async function SessionsPage({
           <Icon name="clock" />
           <span>
             No session today. Next: <strong>{nextOne.title}</strong>,{" "}
-            {formatDay(nextOne.session_date)} at{" "}
-            {formatTime(nextOne.start_time)}
+            {formatDay(nextOne.session_date)} at {formatTime(nextOne.start_time)}
             {(coming.get(nextOne.id) ?? 0) > 0
               ? `, ${coming.get(nextOne.id)} said coming`
               : ""}
@@ -168,9 +167,7 @@ export default async function SessionsPage({
           <strong>{weekLabel(monday, thisMonday)}</strong>
           <span>
             {live.length} {live.length === 1 ? "session" : "sessions"}
-            {monday <= thisMonday
-              ? `, ${visits} ${visits === 1 ? "visit" : "visits"}`
-              : ""}
+            {monday <= thisMonday ? `, ${visits} ${visits === 1 ? "visit" : "visits"}` : ""}
           </span>
         </div>
         <Link

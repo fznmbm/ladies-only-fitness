@@ -677,3 +677,77 @@ input[type="checkbox"] {
   height: 1px;
   overflow: hidden;
 }
+
+/* ---------- Accounts ---------- */
+.money-tiles {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+  margin-bottom: 4px;
+}
+.money-tile {
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 12px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.money-tile span {
+  font-size: 13px;
+  color: var(--muted);
+}
+.money-tile strong {
+  font-size: 18px;
+  overflow-wrap: anywhere;
+}
+.money-tile.profit {
+  background: var(--plum);
+  border-color: var(--plum);
+  color: #fff;
+}
+.money-tile.profit span {
+  color: rgba(255, 255, 255, 0.8);
+}
+.money-tile.loss strong,
+.money-table .loss {
+  color: var(--brick);
+}
+.money-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+  font-variant-numeric: tabular-nums;
+}
+.money-table th,
+.money-table td {
+  padding: 10px 12px;
+  text-align: right;
+  border-bottom: 1px solid var(--line);
+  white-space: nowrap;
+}
+.money-table th:first-child {
+  text-align: left;
+}
+.money-table thead th {
+  font-size: 13px;
+  color: var(--muted);
+  font-weight: 700;
+}
+.money-table tbody th {
+  font-weight: 500;
+}
+.money-table tbody th a {
+  text-decoration: none;
+  color: inherit;
+}
+.money-table tr.on {
+  background: var(--sand);
+}
+.money-table tfoot th,
+.money-table tfoot td {
+  font-weight: 700;
+  border-bottom: 0;
+}

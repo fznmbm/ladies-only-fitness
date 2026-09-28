@@ -95,7 +95,10 @@ export default async function MemberPage({
       <Link href="/members" className="back" style={{ marginTop: 8 }}>
         <Icon name="back" /> Members
       </Link>
-      <PageHead title={member.name} />
+      <PageHead
+        title={member.name}
+        sub={member.pay_ref ? `Payment reference ${member.pay_ref}` : undefined}
+      />
 
       {error ? (
         <div className="note warn" role="alert" style={{ marginBottom: 12 }}>

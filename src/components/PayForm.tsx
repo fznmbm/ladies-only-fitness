@@ -17,7 +17,8 @@ type Props = {
   bank: Bank;
   months: { value: string; label: string }[];
   defaultMonth: string;
-  memberFirstName: string;
+  /** Her own reference to put on the bank transfer, e.g. AMINA-4821. */
+  payRef: string;
 };
 
 export function PayForm({
@@ -26,7 +27,7 @@ export function PayForm({
   bank,
   months,
   defaultMonth,
-  memberFirstName,
+  payRef,
 }: Props) {
   const [state, action, pending] = useActionState(payForMonth, null);
   const [fileName, setFileName] = useState<string | null>(null);
@@ -109,7 +110,7 @@ export function PayForm({
           <br />
           Sort code {bank.sortCode} · Account {bank.accountNumber}
           <br />
-          Reference: {memberFirstName}
+          Reference: <strong>{payRef}</strong>
         </div>
       </div>
 

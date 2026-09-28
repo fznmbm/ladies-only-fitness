@@ -9,10 +9,14 @@ import { toPence } from "@/lib/money";
 import { groupName, siteOrigin } from "@/lib/config";
 import { hashToken, newToken } from "@/lib/memberAuth";
 import { normalizePhone, whatsappUrl } from "@/lib/phone";
-import { deleteMemberReceipts } from "@/lib/b2";
+import {
+  deleteMemberReceipts,
+  deleteReceipt,
+  uploadExpenseReceipt,
+} from "@/lib/b2";
 import { ensureSessions } from "@/lib/sessions";
 import { GROUP_COOKIE, requireGroup } from "@/lib/groups";
-import type { Plan } from "@/lib/types";
+import { EXPENSE_CATEGORIES, type Plan } from "@/lib/types";
 
 function refresh() {
   revalidatePath("/", "layout");
@@ -797,5 +801,75 @@ export async function declineRequest(formData: FormData) {
       .eq("status", "pending");
     check(e2);
   }
+  refresh();
+}
+
+// ---------- Accounts: costs ----------
+
+export type ExpenseState = { ok: true } | { error: string } | null;
+
+/**
+ * Records a cost, such as hall hire. It can be for the group being viewed or
+ * shared by all groups, and a bulk payment can be spread over several months.
+ */
+export async function addExpense(
+  _prev: ExpenseState,
+  formData: FormData,
+): Promise<ExpenseState> {
+  const supabase = await createClient();
+  const group = await requireGroup();
+
+  const amount = toPence(str(formData, "amount"));
+  const paidOn = str(formData, "paidOn");
+  const coversFrom = str(formData, "coversFrom");
+  const months = Math.round(Number(str(formData, "months")) || 1);
+  const category = str(formData, "category");
+  const receipt = formData.get("receipt");
+
+  if (!(amount > 0)) return { error: "Enter how much it cost." };
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(paidOn)) return { error: "Enter the date you paid." };
+  if (!/^\d{4}-\d{2}-01$/.test(coversFrom)) return { error: "Choose which month it's for." };
+  if (months < 1 || months > 24) return { error: "It can cover 1 to 24 months." };
+  if (!(category in EXPENSE_CATEGORIES)) return { error: "Choose what it was for." };
+
+  let receiptPath: string | null = null;
+  if (receipt instanceof File && receipt.size > 0) {
+    if (!receipt.type.startsWith("image/"))
+      return { error: "The receipt needs to be a photo." };
+    try {
+      receiptPath = await uploadExpenseReceipt(receipt);
+    } catch {
+      return { error: "Couldn't upload the receipt photo. Try again, or save without it." };
+    }
+  }
+
+  const { error } = await supabase.from("expenses").insert({
+    group_id: str(formData, "scope") === "all" ? null : group.id,
+    category,
+    description: str(formData, "description").slice(0, 120) || null,
+    amount_pence: amount,
+    paid_on: paidOn,
+    covers_from: coversFrom,
+    covers_months: months,
+    receipt_path: receiptPath,
+  });
+  if (error) {
+    if (receiptPath) await deleteReceipt(receiptPath).catch(() => {});
+    return { error: error.message };
+  }
+  refresh();
+  return { ok: true };
+}
+
+export async function deleteExpense(formData: FormData) {
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .from("expenses")
+    .delete()
+    .eq("id", str(formData, "id"))
+    .select("receipt_path");
+  check(error);
+  const path = (data?.[0] as { receipt_path: string | null } | undefined)?.receipt_path;
+  if (path) await deleteReceipt(path).catch(() => {});
   refresh();
 }

@@ -274,7 +274,7 @@ export default async function MePage() {
               bank={bank}
               months={payMonths}
               defaultMonth={defaultPayMonth}
-              memberFirstName={member.name.split(" ")[0]}
+              payRef={member.pay_ref ?? member.name.split(" ")[0]}
             />
           </div>
         </>
