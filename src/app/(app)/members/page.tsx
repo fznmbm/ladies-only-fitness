@@ -157,10 +157,7 @@ export default async function MembersPage({
   return (
     <>
       <AutoRefresh seconds={20} />
-      <PageHead
-        title="Members"
-        sub={`${members.length} in ${group.name}`}
-      />
+      <PageHead title="Members" sub={`${members.length} in ${group.name}`} />
 
       {params.error ? (
         <div className="note warn" role="alert" style={{ marginBottom: 12 }}>
@@ -171,15 +168,15 @@ export default async function MembersPage({
       ) : null}
 
       {isOrganiser ? (
-      <JoinRequests
-        requests={pending.map((r) => ({
-          id: r.id,
-          name: r.name,
-          phone: r.phone,
-          groupId: group.id,
-          existing: r.status === "active",
-        }))}
-      />
+        <JoinRequests
+          requests={pending.map((r) => ({
+            id: r.id,
+            name: r.name,
+            phone: r.phone,
+            groupId: group.id,
+            existing: r.status === "active",
+          }))}
+        />
       ) : null}
 
       <div className="stack">
@@ -199,7 +196,7 @@ export default async function MembersPage({
                 name="phone"
                 type="tel"
                 inputMode="tel"
-                placeholder="07… or +94…"
+                placeholder="07… or +44…"
               />
             </div>
             <SubmitButton

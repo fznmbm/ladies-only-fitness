@@ -15,7 +15,7 @@ export const getGroupContext = cache(async () => {
   const supabase = await createClient();
   const { data } = await supabase
     .from("groups")
-    .select("id, name, sort, active")
+    .select("id, name, sort, active, join_slug")
     .order("sort")
     .order("created_at");
   const groups = (data ?? []) as Group[];
@@ -29,6 +29,7 @@ export const getGroupContext = cache(async () => {
 /** The current group, for pages that can't work without one. */
 export async function requireGroup(): Promise<Group> {
   const { group } = await getGroupContext();
-  if (!group) throw new Error("No group has been set up yet. Run migration 009.");
+  if (!group)
+    throw new Error("No group has been set up yet. Run migration 009.");
   return group;
 }

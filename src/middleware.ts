@@ -7,6 +7,7 @@ function isPublic(path: string): boolean {
   return (
     path === "/" ||
     path === "/join" ||
+    path.startsWith("/join/") ||
     path.startsWith("/m/") ||
     // Exactly /me or /me/…, so organiser pages like /members stay protected.
     path === "/me" ||

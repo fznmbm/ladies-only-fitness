@@ -8,7 +8,11 @@ let lastAlert = 0;
  * app and subscribe to the same private topic name). Leave it empty for no alerts.
  * At most one alert a minute, and never any personal details.
  */
-export const onRequestError: Instrumentation.onRequestError = async (err, request, context) => {
+export const onRequestError: Instrumentation.onRequestError = async (
+  err,
+  request,
+  context,
+) => {
   const url = process.env.ALERT_WEBHOOK_URL;
   if (!url) return;
   const now = Date.now();
@@ -21,7 +25,7 @@ export const onRequestError: Instrumentation.onRequestError = async (err, reques
   try {
     await fetch(url, {
       method: "POST",
-      headers: { Title: "Ladies Fitness: something went wrong", Tags: "warning" },
+      headers: { Title: "LiveFit: something went wrong", Tags: "warning" },
       body: `${e.message || "Error"}\n${request.method} ${path}\nReference: ${e.digest ?? "none"} (${context.routeType})`,
     });
   } catch {

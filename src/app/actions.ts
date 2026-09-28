@@ -15,7 +15,7 @@ import {
   todayISO,
 } from "@/lib/dates";
 import { pounds, toPence } from "@/lib/money";
-import { groupName, siteOrigin } from "@/lib/config";
+import { APP_FULL_NAME, siteOrigin } from "@/lib/config";
 import { hashToken, newToken } from "@/lib/memberAuth";
 import { normalizePhone, whatsappUrl } from "@/lib/phone";
 import {
@@ -30,7 +30,11 @@ import { logActivity } from "@/lib/activity";
 import { EXPENSE_CATEGORIES, type Plan } from "@/lib/types";
 
 /** "Zumba, Wed 1 Oct 7:00 pm", for the activity record. */
-function describeSession(s: { title: string; session_date: string; start_time: string }) {
+function describeSession(s: {
+  title: string;
+  session_date: string;
+  start_time: string;
+}) {
   return `${s.title}, ${formatDate(s.session_date)} ${formatTime(s.start_time)}`;
 }
 
@@ -104,7 +108,11 @@ export async function setCurrentGroup(formData: FormData) {
   refresh();
   const back = str(formData, "back");
   // Only ever go back to one of the app's own organiser pages.
-  redirect(/^\/(sessions|members|payments|share|settings)(\/|$)/.test(back) ? back.split("?")[0] : "/sessions");
+  redirect(
+    /^\/(sessions|members|payments|share|settings)(\/|$)/.test(back)
+      ? back.split("?")[0]
+      : "/sessions",
+  );
 }
 
 export async function addGroup(formData: FormData) {
@@ -140,6 +148,21 @@ export async function renameGroup(formData: FormData) {
     .update({ name })
     .eq("id", str(formData, "id"));
   check(error);
+  refresh();
+}
+
+/** A new short join link for a group. The old one stops working straight away. */
+export async function newJoinLink(formData: FormData) {
+  await requireOrganiser();
+  const supabase = await createClient();
+  const groupId = str(formData, "id");
+  // Clearing it makes the database pick a fresh one.
+  const { error } = await supabase
+    .from("groups")
+    .update({ join_slug: null })
+    .eq("id", groupId);
+  check(error);
+  await logActivity(supabase, "Made a new join link", "", groupId);
   refresh();
 }
 
@@ -190,7 +213,8 @@ export async function addSession(formData: FormData) {
     start_time: time,
     title: str(formData, "title") || "Workout session",
   });
-  if (error && !error.message.includes("sessions_group_date_time")) check(error);
+  if (error && !error.message.includes("sessions_group_date_time"))
+    check(error);
   refresh();
 }
 
@@ -224,7 +248,9 @@ export async function moveSession(formData: FormData) {
   if (!session) back("That session no longer exists.");
   if (!date || !/^\d{2}:\d{2}$/.test(time)) back("Choose a date and a time.");
   if ((attended ?? 0) > 0)
-    back("Ladies have already been marked here, so this session can't be moved.");
+    back(
+      "Ladies have already been marked here, so this session can't be moved.",
+    );
   if (date < todayISO()) back("A session can't be moved into the past.");
 
   const oldDate = session!.session_date as string;
@@ -243,7 +269,10 @@ export async function moveSession(formData: FormData) {
     );
 
   if (moved) {
-    const { error: e2 } = await supabase.from("rsvps").delete().eq("session_id", id);
+    const { error: e2 } = await supabase
+      .from("rsvps")
+      .delete()
+      .eq("session_id", id);
     check(e2);
   }
   await logActivity(
@@ -255,9 +284,7 @@ export async function moveSession(formData: FormData) {
   );
   refresh();
   redirect(
-    moved
-      ? `/sessions/${id}?moved=${oldDate}T${oldTime}`
-      : `/sessions/${id}`,
+    moved ? `/sessions/${id}?moved=${oldDate}T${oldTime}` : `/sessions/${id}`,
   );
 }
 
@@ -297,7 +324,12 @@ export async function restoreSession(formData: FormData) {
     .select("title, session_date, start_time, group_id")
     .maybeSingle();
   if (restored)
-    await logActivity(supabase, "Brought session back", describeSession(restored), restored.group_id);
+    await logActivity(
+      supabase,
+      "Brought session back",
+      describeSession(restored),
+      restored.group_id,
+    );
   if (error)
     redirect(
       `/sessions/${id}?error=` +
@@ -413,7 +445,11 @@ export async function cashPlan(formData: FormData) {
     .eq("id", attendanceId);
   check(e2);
   await settlePayLater(supabase, memberId, session.group_id, month);
-  const { data: m } = await supabase.from("members").select("name").eq("id", memberId).maybeSingle();
+  const { data: m } = await supabase
+    .from("members")
+    .select("name")
+    .eq("id", memberId)
+    .maybeSingle();
   await logActivity(
     supabase,
     "Cash for a plan at the door",
@@ -439,7 +475,8 @@ export async function addWalkIn(formData: FormData) {
     .select("session_date, cancelled, group_id")
     .eq("id", sessionId)
     .maybeSingle();
-  if (!session || session.cancelled || session.session_date > todayISO()) return;
+  if (!session || session.cancelled || session.session_date > todayISO())
+    return;
 
   // Same number as someone already in the app? Mark her here under her existing
   // name instead of adding her twice, and add her to this group if she isn't in it.
@@ -635,7 +672,11 @@ export async function recordPayment(formData: FormData) {
     redirect("/payments?error=" + encodeURIComponent(msg));
   }
   await settlePayLater(supabase, memberId, p.group_id, month);
-  const { data: m } = await supabase.from("members").select("name").eq("id", memberId).maybeSingle();
+  const { data: m } = await supabase
+    .from("members")
+    .select("name")
+    .eq("id", memberId)
+    .maybeSingle();
   await logActivity(
     supabase,
     "Recorded payment",
@@ -661,7 +702,8 @@ export async function voidPayment(formData: FormData) {
     .eq("id", id);
   check(error);
   if (before) {
-    const who = (before.members as unknown as { name: string } | null)?.name ?? "someone";
+    const who =
+      (before.members as unknown as { name: string } | null)?.name ?? "someone";
     await logActivity(
       supabase,
       before.status === "pending" ? "Payment not received" : "Removed payment",
@@ -689,7 +731,8 @@ export async function confirmPayment(formData: FormData) {
   check(error);
   if (sub) {
     await settlePayLater(supabase, sub.member_id, sub.group_id, sub.month);
-    const who = (sub.members as unknown as { name: string } | null)?.name ?? "someone";
+    const who =
+      (sub.members as unknown as { name: string } | null)?.name ?? "someone";
     await logActivity(
       supabase,
       "Confirmed payment",
@@ -806,7 +849,9 @@ export async function deleteSlot(formData: FormData) {
     .select("weekday, start_time, title, group_id")
     .eq("id", slotId)
     .maybeSingle();
-  const { data, error } = await supabase.rpc("remove_slot", { p_slot_id: slotId });
+  const { data, error } = await supabase.rpc("remove_slot", {
+    p_slot_id: slotId,
+  });
   check(error);
   if (slot)
     await logActivity(
@@ -846,7 +891,7 @@ async function issueLink(supabase: Db, memberId: string): Promise<LinkState> {
   const url = `${await siteOrigin()}/m/${token}`;
   const first = String(member.name).split(" ")[0];
   const text =
-    `Hi ${first}, here's your personal link for ${groupName()}: ${url}\n\n` +
+    `Hi ${first}, here's your personal link for ${APP_FULL_NAME}: ${url}\n\n` +
     `Tap it once, then add it to your home screen. It's just for you, so please don't share it.`;
   return { url, wa: whatsappUrl(member.phone, text) };
 }
@@ -855,7 +900,8 @@ export async function makeLoginLink(
   _prev: LinkState,
   formData: FormData,
 ): Promise<LinkState> {
-  if (!(await isOrganiser())) return { error: "Only the organiser can do that." };
+  if (!(await isOrganiser()))
+    return { error: "Only the organiser can do that." };
   const supabase = await createClient();
   return issueLink(supabase, str(formData, "memberId"));
 }
@@ -869,7 +915,8 @@ export async function approveRequest(
   _prev: LinkState,
   formData: FormData,
 ): Promise<LinkState> {
-  if (!(await isOrganiser())) return { error: "Only the organiser can do that." };
+  if (!(await isOrganiser()))
+    return { error: "Only the organiser can do that." };
   const supabase = await createClient();
   const memberId = str(formData, "memberId");
   const groupId = str(formData, "groupId");
@@ -943,7 +990,8 @@ export async function addExpense(
   _prev: ExpenseState,
   formData: FormData,
 ): Promise<ExpenseState> {
-  if (!(await isOrganiser())) return { error: "Only the organiser can do that." };
+  if (!(await isOrganiser()))
+    return { error: "Only the organiser can do that." };
   const supabase = await createClient();
   const group = await requireGroup();
 
@@ -955,10 +1003,14 @@ export async function addExpense(
   const receipt = formData.get("receipt");
 
   if (!(amount > 0)) return { error: "Enter how much it cost." };
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(paidOn)) return { error: "Enter the date you paid." };
-  if (!/^\d{4}-\d{2}-01$/.test(coversFrom)) return { error: "Choose which month it's for." };
-  if (months < 1 || months > 24) return { error: "It can cover 1 to 24 months." };
-  if (!(category in EXPENSE_CATEGORIES)) return { error: "Choose what it was for." };
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(paidOn))
+    return { error: "Enter the date you paid." };
+  if (!/^\d{4}-\d{2}-01$/.test(coversFrom))
+    return { error: "Choose which month it's for." };
+  if (months < 1 || months > 24)
+    return { error: "It can cover 1 to 24 months." };
+  if (!(category in EXPENSE_CATEGORIES))
+    return { error: "Choose what it was for." };
 
   let receiptPath: string | null = null;
   if (receipt instanceof File && receipt.size > 0) {
@@ -967,7 +1019,10 @@ export async function addExpense(
     try {
       receiptPath = await uploadExpenseReceipt(receipt);
     } catch {
-      return { error: "Couldn't upload the receipt photo. Try again, or save without it." };
+      return {
+        error:
+          "Couldn't upload the receipt photo. Try again, or save without it.",
+      };
     }
   }
 
@@ -1007,9 +1062,15 @@ export async function deleteExpense(formData: FormData) {
     .select("receipt_path, category, amount_pence, group_id");
   check(error);
   const gone = data?.[0] as
-    | { receipt_path: string | null; category: string; amount_pence: number; group_id: string | null }
+    | {
+        receipt_path: string | null;
+        category: string;
+        amount_pence: number;
+        group_id: string | null;
+      }
     | undefined;
-  if (gone?.receipt_path) await deleteReceipt(gone.receipt_path).catch(() => {});
+  if (gone?.receipt_path)
+    await deleteReceipt(gone.receipt_path).catch(() => {});
   if (gone)
     await logActivity(
       supabase,

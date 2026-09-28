@@ -1,131 +1,39 @@
-import { requestToJoin } from "./actions";
+import type { Metadata } from "next";
 import { joinableGroup } from "@/lib/joinableGroup";
-import { PageHead } from "@/components/PageHead";
-import { SubmitButton } from "@/components/SubmitButton";
+import { joinMetadata } from "@/lib/config";
+import { JoinScreen } from "./JoinScreen";
 
 export const dynamic = "force-dynamic";
+
+type Params = {
+  g?: string;
+  code?: string;
+  sent?: string;
+  problem?: string;
+  name?: string;
+  phone?: string;
+};
+
+/** The older, long join link: /join?g=…&code=… (still works). */
+async function linkedGroup({ g = "", code = "" }: Params) {
+  const needed = process.env.JOIN_CODE;
+  if (needed && code !== needed) return null;
+  return joinableGroup(g);
+}
+
+export async function generateMetadata({
+  searchParams,
+}: {
+  searchParams: Promise<Params>;
+}): Promise<Metadata> {
+  return joinMetadata((await linkedGroup(await searchParams))?.name);
+}
 
 export default async function JoinPage({
   searchParams,
 }: {
-  searchParams: Promise<{
-    g?: string;
-    code?: string;
-    sent?: string;
-    problem?: string;
-    name?: string;
-    phone?: string;
-  }>;
+  searchParams: Promise<Params>;
 }) {
-  const {
-    g = "",
-    code = "",
-    sent,
-    problem,
-    name = "",
-    phone = "",
-  } = await searchParams;
-  const needed = process.env.JOIN_CODE;
-  const group = await joinableGroup(g);
-  const allowed = (!needed || code === needed) && !!group;
-
-  return (
-    <main className="shell">
-      {/* eslint-disable-next-line @next/next/no-img-element */}
-      <img
-        src="/brand/livefit-logo.png"
-        alt="LiveFit Club"
-        className="brand-logo"
-        style={{ marginTop: 28, width: 120 }}
-      />
-      {sent ? (
-        <>
-          <PageHead title="Request sent" />
-          <div className="note">
-            Thank you. The organiser will check your request and send your
-            personal link on WhatsApp.
-          </div>
-        </>
-      ) : !allowed ? (
-        <>
-          <PageHead title="Join the group" />
-          <div className="note warn">
-            This join link isn&apos;t right. Ask the organiser to send it to you
-            again.
-          </div>
-        </>
-      ) : (
-        <>
-          <PageHead
-            title={`Join ${group!.name}`}
-            sub="Ladies only. The organiser approves everyone before they can use the app."
-          />
-          <form
-            action={requestToJoin}
-            className="stack"
-            style={{ marginTop: 8 }}
-          >
-            {problem === "2" ? (
-              <div className="note warn" role="alert">
-                Something went wrong sending that. Please try again, or message
-                the organiser directly.
-              </div>
-            ) : problem ? (
-              <div className="note warn" role="alert">
-                Please enter your name and a WhatsApp number with at least 8
-                digits.
-              </div>
-            ) : null}
-            <input type="hidden" name="code" value={code} />
-            <input type="hidden" name="g" value={g} />
-            <div className="hp" aria-hidden="true">
-              <label htmlFor="website">Leave this empty</label>
-              <input
-                id="website"
-                name="website"
-                tabIndex={-1}
-                autoComplete="off"
-              />
-            </div>
-            <div className="field">
-              <label htmlFor="name">Your name</label>
-              <input
-                id="name"
-                name="name"
-                autoComplete="name"
-                required
-                maxLength={80}
-                defaultValue={name}
-              />
-            </div>
-            <div className="field">
-              <label htmlFor="phone">Your WhatsApp number</label>
-              <input
-                id="phone"
-                name="phone"
-                type="tel"
-                inputMode="tel"
-                autoComplete="tel"
-                placeholder="07… or +94…"
-                required
-                maxLength={30}
-                defaultValue={phone}
-              />
-            </div>
-            <SubmitButton
-              className="btn btn-primary btn-block"
-              style={{ minHeight: 52 }}
-              pendingText="Sending…"
-            >
-              Send request
-            </SubmitButton>
-            <p className="small muted">
-              Your name and number are only used to run the group.{" "}
-              <a href="/privacy">How we look after your details</a>.
-            </p>
-          </form>
-        </>
-      )}
-    </main>
-  );
+  const params = await searchParams;
+  return <JoinScreen group={await linkedGroup(params)} {...params} />;
 }

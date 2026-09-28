@@ -61,15 +61,18 @@ a {
   margin-bottom: 4px;
 }
 
-/* The small LiveFit mark and name above page titles. */
-.brand-line {
+/* The LiveFit mark and name at the top of the ladies' page. */
+.brand-top {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
+  padding-top: 18px;
+  font-weight: 600;
+  color: var(--plum);
 }
-.brand-line img {
+.brand-top img {
   width: auto;
-  height: 22px;
+  height: 30px;
 }
 .brand-logo {
   display: block;
@@ -112,13 +115,27 @@ a {
 }
 .org-top .group-name {
   margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--plum);
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* A long group name shrinks, so "Sign out" always fits on a small phone. */
+.org-top .group-switch {
+  flex: 0 1 auto;
+  min-width: 0;
+}
+.org-top .group-switch select {
+  width: 100%;
+  text-overflow: ellipsis;
 }
 .org .page-head {
   padding-top: 6px;
 }
-.org .page-head > .group-name {
-  display: none;
-}
+
 .group-switch select {
   width: auto;
   max-width: 100%;

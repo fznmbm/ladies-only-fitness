@@ -3,21 +3,25 @@
 import { redirect } from "next/navigation";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { normalizePhone } from "@/lib/phone";
-import { joinableGroup } from "@/lib/joinableGroup";
+import { groupBySlug, joinableGroup } from "@/lib/joinableGroup";
 
 function str(f: FormData, key: string): string {
   return String(f.get(key) ?? "").trim();
 }
 
 export async function requestToJoin(formData: FormData) {
+  // The short link (/join/livefitclub-7a3f) carries only its slug. The older
+  // long link carries the group and the join code.
+  const slug = str(formData, "slug");
   const code = str(formData, "code");
   const groupId = str(formData, "g");
   const needed = process.env.JOIN_CODE;
+  const back = slug ? `/join/${encodeURIComponent(slug)}` : "/join";
 
   // Hidden field that only bots fill in.
-  if (str(formData, "website")) redirect(`/join?sent=1`);
+  if (str(formData, "website")) redirect(`${back}?sent=1`);
 
-  if (needed && code !== needed) redirect("/join");
+  if (!slug && needed && code !== needed) redirect("/join");
 
   const name = str(formData, "name").slice(0, 80);
   const phone = str(formData, "phone").slice(0, 30);
@@ -25,24 +29,24 @@ export async function requestToJoin(formData: FormData) {
   // Carries the code, group and whatever she typed back to the form, so a
   // problem never means retyping everything.
   const params = new URLSearchParams();
-  if (groupId) params.set("g", groupId);
-  if (code) params.set("code", code);
+  if (!slug && groupId) params.set("g", groupId);
+  if (!slug && code) params.set("code", code);
   if (name) params.set("name", name);
   if (phone) params.set("phone", phone);
 
-  const group = await joinableGroup(groupId);
-  if (!group) redirect(`/join?${params.toString()}`);
+  const group = slug ? await groupBySlug(slug) : await joinableGroup(groupId);
+  if (!group) redirect(`${back}?${params.toString()}`);
 
   const tidyPhone = normalizePhone(phone);
   if (!name || !tidyPhone) {
     params.set("problem", "1");
-    redirect(`/join?${params.toString()}`);
+    redirect(`${back}?${params.toString()}`);
   }
 
   const admin = createAdminClient();
   const fail = () => {
     params.set("problem", "2");
-    redirect(`/join?${params.toString()}`);
+    redirect(`${back}?${params.toString()}`);
   };
 
   // Someone with this number may already be in the app (another group, or
@@ -74,5 +78,5 @@ export async function requestToJoin(formData: FormData) {
     );
   if (e2) fail();
 
-  redirect("/join?sent=1");
+  redirect(`${back}?sent=1`);
 }

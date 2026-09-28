@@ -9,6 +9,7 @@ import {
   addPlan,
   addSlot,
   deleteSlot,
+  newJoinLink,
   removeHelper,
   renameGroup,
   savePlan,
@@ -107,7 +108,11 @@ export default async function SettingsPage({
       .eq("group_id", group.id)
       .order("weekday")
       .order("start_time"),
-    supabase.from("staff").select("user_id, name, role").order("role").order("name"),
+    supabase
+      .from("staff")
+      .select("user_id, name, role")
+      .order("role")
+      .order("name"),
     supabase
       .from("activity_log")
       .select("id, at, staff_name, action, detail")
@@ -142,7 +147,7 @@ export default async function SettingsPage({
   const liveGroups = groups.filter((g) => g.active);
   const pausedGroups = groups.filter((g) => !g.active);
 
-  const invite = joinLink(await siteOrigin(), group.id);
+  const invite = joinLink(await siteOrigin(), group);
   const inviteText = `Hi ladies! To join ${group.name} online, tap this link and enter your name and WhatsApp number. I'll send you your own link once I've checked it: ${invite}`;
 
   const changed = Number(n) || 0;
@@ -183,6 +188,17 @@ export default async function SettingsPage({
         <ShareToWhatsApp text={inviteText}>
           <Icon name="send" size={18} /> Share in WhatsApp
         </ShareToWhatsApp>
+        {group.join_slug ? (
+          <form action={newJoinLink}>
+            <input type="hidden" name="id" value={group.id} />
+            <ConfirmSubmit
+              className="btn btn-quiet btn-small"
+              confirm="Make a new join link? The current one stops working straight away, so only use this if strangers have got hold of it."
+            >
+              Make a new link
+            </ConfirmSubmit>
+          </form>
+        ) : null}
       </div>
 
       <h2 className="section-title">This app on your phone</h2>
@@ -234,10 +250,10 @@ export default async function SettingsPage({
                   <input type="hidden" name="id" value={s.id} />
                   <DayTimeFields prefix={`slot-${s.id}`} slot={s} />
                   <p className="small muted" style={{ marginBottom: 12 }}>
-                    Upcoming sessions nobody has been marked at yet move too.
-                    If the day or time changes, their &ldquo;I&apos;m
-                    coming&rdquo; answers are cleared. Sessions you moved by
-                    hand stay as they are.
+                    Upcoming sessions nobody has been marked at yet move too. If
+                    the day or time changes, their &ldquo;I&apos;m coming&rdquo;
+                    answers are cleared. Sessions you moved by hand stay as they
+                    are.
                   </p>
                   <SubmitButton
                     className="btn btn-primary btn-block"
@@ -273,8 +289,8 @@ export default async function SettingsPage({
       <div className="note" style={{ marginBottom: 12 }}>
         <Icon name="clock" />
         <span>
-          Plans run for the calendar month and only count {group.name}{" "}
-          sessions. New prices only apply to payments recorded from now on.
+          Plans run for the calendar month and only count {group.name} sessions.
+          New prices only apply to payments recorded from now on.
         </span>
       </div>
 
@@ -526,9 +542,9 @@ export default async function SettingsPage({
       <div className="note" style={{ marginBottom: 12 }}>
         <Icon name="users" />
         <span>
-          Helpers can take the register, add walk-ins and take cash at the
-          door. They can&apos;t see payments or accounts, change settings, or
-          delete anyone.
+          Helpers can take the register, add walk-ins and take cash at the door.
+          They can&apos;t see payments or accounts, change settings, or delete
+          anyone.
         </span>
       </div>
       <ul className="list" style={{ marginBottom: 12 }}>
@@ -539,7 +555,9 @@ export default async function SettingsPage({
                 {p.name || "Organiser"}
                 {p.user_id === me?.id ? " (you)" : ""}
               </div>
-              <div className="sub">{p.role === "helper" ? "Helper" : "Organiser"}</div>
+              <div className="sub">
+                {p.role === "helper" ? "Helper" : "Organiser"}
+              </div>
             </div>
             {p.role === "helper" ? (
               <form action={removeHelper}>
@@ -575,7 +593,9 @@ export default async function SettingsPage({
             />
           </div>
           <div className="field">
-            <label htmlFor="helper-password">Password for her (8+ characters)</label>
+            <label htmlFor="helper-password">
+              Password for her (8+ characters)
+            </label>
             <input
               id="helper-password"
               name="password"
@@ -589,7 +609,10 @@ export default async function SettingsPage({
             Send her the email and password privately. She can use them on any
             phone.
           </p>
-          <SubmitButton className="btn btn-primary btn-block" pendingText="Adding…">
+          <SubmitButton
+            className="btn btn-primary btn-block"
+            pendingText="Adding…"
+          >
             Add helper
           </SubmitButton>
         </form>

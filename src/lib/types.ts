@@ -3,6 +3,8 @@ export type Group = {
   name: string;
   sort: number;
   active: boolean;
+  /** The end of the short join link, e.g. "livefitclub-7a3f" in /join/livefitclub-7a3f. */
+  join_slug: string | null;
 };
 
 export type MemberGroup = {
