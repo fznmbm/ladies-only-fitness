@@ -17,23 +17,41 @@ const display = Fraunces({
   variable: "--font-display",
 });
 
+const description = "Sessions, plans and payments for LiveFit Club, a ladies-only fitness group.";
+
 export const metadata: Metadata = {
-  title: "Ladies Fitness",
-  description: "Sessions, plans and attendance for the ladies fitness group.",
+  // Makes the link-preview image a full web address (needed by WhatsApp).
+  metadataBase: new URL(process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000"),
+  title: { default: "LiveFit", template: "%s · LiveFit" },
+  applicationName: "LiveFit",
+  description,
   robots: { index: false, follow: false },
   manifest: "/manifest.webmanifest",
   icons: {
-    icon: [{ url: "/icon-192.png", sizes: "192x192", type: "image/png" }],
+    icon: [
+      { url: "/favicon.ico", sizes: "any" },
+      { url: "/icon-192.png", sizes: "192x192", type: "image/png" },
+    ],
     apple: "/apple-touch-icon.png",
   },
-  appleWebApp: { capable: true, title: "Fitness", statusBarStyle: "default" },
+  appleWebApp: { capable: true, title: "LiveFit", statusBarStyle: "default" },
+  // What a link shows when it's shared on WhatsApp and elsewhere.
+  openGraph: {
+    type: "website",
+    siteName: "LiveFit Club",
+    title: "LiveFit Club",
+    description,
+    images: [{ url: "/og.png", width: 1200, height: 630, alt: "LiveFit Club" }],
+    locale: "en_GB",
+  },
+  twitter: { card: "summary_large_image", title: "LiveFit Club", images: ["/og.png"] },
 };
 
 export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
   viewportFit: "cover",
-  themeColor: "#5b2a4e",
+  themeColor: "#681c4c",
 };
 
 export default function RootLayout({

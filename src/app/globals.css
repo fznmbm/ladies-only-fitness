@@ -1,8 +1,8 @@
 :root {
-  --bg: #faf5ef;
+  --bg: #fdf9ee;
   --ink: #2b1f2e;
   --muted: #6b5a69;
-  --plum: #5b2a4e;
+  --plum: #681c4c;
   --plum-tint: #f0e4ec;
   --brick: #a93a24;
   --brick-tint: #fbe6df;
@@ -61,9 +61,54 @@ a {
   margin-bottom: 4px;
 }
 
-/* Organiser screens: the group name (or group menu) sits above every page title. */
+/* The small LiveFit mark and name above page titles. */
+.brand-line {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.brand-line img {
+  width: auto;
+  height: 22px;
+}
+.brand-logo {
+  display: block;
+  width: 150px;
+  height: auto;
+  margin: 0 auto 8px;
+}
+
+/* Organiser screens: the group name (or group menu) sits above every page title,
+   with the LiveFit mark and who's signed in. */
 .org-top {
   padding-top: 18px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.org-top > img {
+  height: 30px;
+  width: auto;
+  flex-shrink: 0;
+}
+.who {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  color: var(--muted);
+  white-space: nowrap;
+}
+.who button {
+  border: 0;
+  background: none;
+  padding: 6px 0;
+  font: inherit;
+  font-weight: 700;
+  color: var(--plum);
+  text-decoration: underline;
+  cursor: pointer;
 }
 .org-top .group-name {
   margin: 0;
@@ -755,4 +800,42 @@ input[type="checkbox"] {
 .money-table tfoot td {
   font-weight: 700;
   border-bottom: 0;
+}
+
+/* ---------- "Put LiveFit on your home screen" card ---------- */
+.install-card {
+  background: #fff;
+  border: 1.5px solid var(--plum);
+  border-radius: var(--radius);
+  padding: 16px;
+}
+.install-title {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 16px;
+}
+.install-title img {
+  border-radius: 10px;
+  flex-shrink: 0;
+}
+.install-card ol {
+  margin: 12px 0 4px;
+  padding-left: 22px;
+  display: grid;
+  gap: 8px;
+  font-size: 15px;
+}
+.install-card ol svg {
+  color: var(--plum);
+}
+.install-later {
+  border: 0;
+  background: none;
+  padding: 8px 0 0;
+  font: inherit;
+  font-size: 14px;
+  color: var(--muted);
+  text-decoration: underline;
+  cursor: pointer;
 }

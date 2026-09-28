@@ -1,13 +1,13 @@
 import Link from "next/link";
 import type { Metadata } from "next";
 import { PageHead } from "@/components/PageHead";
-import { groupName } from "@/lib/config";
+import { APP_FULL_NAME } from "@/lib/config";
 
 export const metadata: Metadata = { title: "Your privacy" };
 
 /** A plain-English privacy notice, linked from the join form and the ladies' page. */
 export default function PrivacyPage() {
-  const name = groupName();
+  const name = APP_FULL_NAME;
   return (
     <main className="shell">
       <PageHead title="Your privacy" sub={name} />

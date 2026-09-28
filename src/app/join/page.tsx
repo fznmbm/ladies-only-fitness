@@ -31,6 +31,13 @@ export default async function JoinPage({
 
   return (
     <main className="shell">
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img
+        src="/brand/livefit-logo.png"
+        alt="LiveFit Club"
+        className="brand-logo"
+        style={{ marginTop: 28, width: 120 }}
+      />
       {sent ? (
         <>
           <PageHead title="Request sent" />

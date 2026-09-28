@@ -2,11 +2,11 @@
 // has no signal when a page is opened, show a friendly "you're offline" page
 // instead of the browser's error. Pages are never stored, so nothing out of date
 // or private is ever shown.
-const CACHE = "offline-v1";
+const CACHE = "offline-v2";
 const OFFLINE = "/offline.html";
 
 self.addEventListener("install", (event) => {
-  event.waitUntil(caches.open(CACHE).then((c) => c.addAll([OFFLINE, "/icon-192.png"])));
+  event.waitUntil(caches.open(CACHE).then((c) => c.addAll([OFFLINE, "/brand/livefit-logo.png"])));
   self.skipWaiting();
 });
 

@@ -60,7 +60,15 @@ export default async function AppLayout({
     <>
       <div className="shell org">
         <div className="org-top">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src="/brand/livefit-mark.png" alt="LiveFit" width={22} height={30} />
           <GroupSwitcher groups={active} currentId={group.id} />
+          {/* Who is signed in on this phone, and a way out. */}
+          <form action={signOut} className="who">
+            <span>{staff.name || (staff.role === "helper" ? "Helper" : "Organiser")}</span>
+            <span aria-hidden="true">·</span>
+            <button type="submit">Sign out</button>
+          </form>
         </div>
         {children}
       </div>

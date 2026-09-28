@@ -1,7 +1,12 @@
 import { headers } from "next/headers";
 
+/** The app's name, shown on screens, the home-screen icon and shared links. */
+export const APP_NAME = "LiveFit";
+export const APP_FULL_NAME = "LiveFit Club";
+
+/** The brand name. (Each group has its own name too, set in Settings.) */
 export function groupName(): string {
-  return process.env.NEXT_PUBLIC_GROUP_NAME || "Ladies Fitness";
+  return APP_NAME;
 }
 
 /** The address of the live site, for building links to send on WhatsApp. */

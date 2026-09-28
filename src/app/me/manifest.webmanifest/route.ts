@@ -8,13 +8,13 @@ export const dynamic = "force-dynamic";
 export async function GET() {
   const token = (await cookies()).get(MEMBER_COOKIE)?.value;
   const manifest = {
-    name: process.env.NEXT_PUBLIC_GROUP_NAME || "Ladies Fitness",
-    short_name: "Fitness",
+    name: "LiveFit Club",
+    short_name: "LiveFit",
     start_url: token ? `/m/${token}` : "/me",
     scope: "/",
     display: "standalone",
-    background_color: "#faf5ef",
-    theme_color: "#5b2a4e",
+    background_color: "#fdf9ee",
+    theme_color: "#681c4c",
     icons: [
       { src: "/icon-192.png", sizes: "192x192", type: "image/png" },
       { src: "/icon-512.png", sizes: "512x512", type: "image/png" },

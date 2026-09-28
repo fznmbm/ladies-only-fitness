@@ -60,12 +60,8 @@ export async function middleware(request: NextRequest) {
     url.search = "";
     return NextResponse.redirect(url);
   }
-  if (user && onLogin) {
-    const url = request.nextUrl.clone();
-    url.pathname = "/sessions";
-    url.search = "";
-    return NextResponse.redirect(url);
-  }
+  // Signed in already and on the sign-in page: the page itself says who is
+  // signed in, with a choice to carry on or sign out and use another account.
   return response;
 }
 

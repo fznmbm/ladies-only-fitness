@@ -264,6 +264,10 @@ export default async function MePage() {
         })}
       </div>
 
+      <div style={{ marginTop: 16 }}>
+        <InstallHint />
+      </div>
+
       {plans.length > 0 ? (
         <>
           <h2 className="section-title">Renew or pay</h2>
@@ -304,9 +308,6 @@ export default async function MePage() {
         </div>
       )}
 
-      <div style={{ marginTop: 24 }}>
-        <InstallHint />
-      </div>
       <p className="small muted" style={{ marginTop: 24, textAlign: "center" }}>
         <a href="/privacy">Your privacy</a>
       </p>
