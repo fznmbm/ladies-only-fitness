@@ -17,11 +17,17 @@ const display = Fraunces({
   variable: "--font-display",
 });
 
-const description = "Sessions, plans and payments for LiveFit Club, a ladies-only fitness group.";
+const description =
+  "Sessions, plans and payments for LiveFit Club, a ladies-only fitness group.";
 
 export const metadata: Metadata = {
   // Makes the link-preview image a full web address (needed by WhatsApp).
-  metadataBase: new URL(process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000"),
+  metadataBase: new URL(
+    process.env.NEXT_PUBLIC_SITE_URL ||
+      (process.env.VERCEL_PROJECT_PRODUCTION_URL
+        ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}`
+        : "https://ladies-only-fitness.vercel.app"),
+  ),
   title: { default: "LiveFit", template: "%s · LiveFit" },
   applicationName: "LiveFit",
   description,
@@ -44,7 +50,11 @@ export const metadata: Metadata = {
     images: [{ url: "/og.png", width: 1200, height: 630, alt: "LiveFit Club" }],
     locale: "en_GB",
   },
-  twitter: { card: "summary_large_image", title: "LiveFit Club", images: ["/og.png"] },
+  twitter: {
+    card: "summary_large_image",
+    title: "LiveFit Club",
+    images: ["/og.png"],
+  },
 };
 
 export const viewport: Viewport = {
