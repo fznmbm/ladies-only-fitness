@@ -11,25 +11,29 @@ import { addSession, generateSessions } from "@/app/actions";
 import { PageHead } from "@/components/PageHead";
 import { Icon } from "@/components/Icon";
 import { SubmitButton } from "@/components/SubmitButton";
+import { requireGroup } from "@/lib/groups";
 import type { Session } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
 
 export default async function SessionsPage() {
   const supabase = await createClient();
+  const group = await requireGroup();
   const today = todayISO();
 
   const [{ data }, { count: slotCount }] = await Promise.all([
     supabase
       .from("sessions")
       .select("*")
+      .eq("group_id", group.id)
       .gte("session_date", weekStart(today))
       .lte("session_date", addDays(today, 27))
       .order("session_date")
       .order("start_time"),
     supabase
       .from("schedule_slots")
-      .select("id", { count: "exact", head: true }),
+      .select("id", { count: "exact", head: true })
+      .eq("group_id", group.id),
   ]);
 
   const sessions = (data ?? []) as Session[];
@@ -68,7 +72,7 @@ export default async function SessionsPage() {
           {(slotCount ?? 0) > 0 ? (
             <form action={generateSessions}>
               <SubmitButton className="btn btn-primary" pendingText="Creating…">
-                <Icon name="plus" /> Create the next 4 weeks
+                <Icon name="plus" /> Create the next 3 weeks
               </SubmitButton>
             </form>
           ) : (

@@ -11,6 +11,7 @@ import {
 import { Icon } from "@/components/Icon";
 import { PageHead } from "@/components/PageHead";
 import { ShareToWhatsApp } from "@/components/ShareToWhatsApp";
+import { requireGroup } from "@/lib/groups";
 import type { Session } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
@@ -41,6 +42,7 @@ function MessageCard({ title, lines }: { title: string; lines: string[] }) {
 
 export default async function SharePage() {
   const supabase = await createClient();
+  const group = await requireGroup();
   const today = todayISO();
   const tomorrow = addDays(today, 1);
   const ws = weekStart(today);
@@ -51,29 +53,45 @@ export default async function SharePage() {
       supabase
         .from("sessions")
         .select("*")
+        .eq("group_id", group.id)
         .gte("session_date", ws)
-        .lte("session_date", addDays(ws, 6))
+        .lte("session_date", addDays(ws, 13))
         .eq("cancelled", false)
         .order("session_date")
         .order("start_time"),
       supabase
         .from("sessions")
         .select("*")
+        .eq("group_id", group.id)
         .eq("session_date", tomorrow)
         .eq("cancelled", false)
         .order("start_time"),
       supabase
         .from("subscriptions")
         .select("id", { count: "exact", head: true })
+        .eq("group_id", group.id)
         .eq("month", monthStart(today))
         .eq("status", "confirmed"),
     ]);
 
-  const weekSessions = (weekData ?? []) as Session[];
+  const nextWs = addDays(ws, 7);
+  const twoWeeks = (weekData ?? []) as Session[];
+  const weekSessions = twoWeeks.filter((s) => s.session_date < nextWs);
+  const nextWeekSessions = twoWeeks.filter((s) => s.session_date >= nextWs);
   const tomorrowSessions = (tomorrowData ?? []) as Session[];
 
+  const nextWeekLines = [
+    `${group.name}: sessions next week (from ${formatDay(nextWs).replace(/^\w+ /, "")})`,
+    ...nextWeekSessions.map(
+      (s) =>
+        `${formatDay(s.session_date).split(" ")[0]} ${formatTime(s.start_time)}`,
+    ),
+    "",
+    "Open your app to let us know if you're coming, or just turn up!",
+  ];
+
   const weekLines = [
-    "Sessions this week",
+    `${group.name}: sessions this week`,
     ...weekSessions.map(
       (s) =>
         `${formatDay(s.session_date).split(" ")[0]} ${formatTime(s.start_time)}`,
@@ -85,7 +103,7 @@ export default async function SharePage() {
   const tomorrowLines =
     tomorrowSessions.length > 0
       ? [
-          `Reminder: session tomorrow`,
+          `${group.name}: reminder, session tomorrow`,
           ...tomorrowSessions.map((s) => formatTime(s.start_time)),
           "",
           "See you there!",
@@ -93,7 +111,7 @@ export default async function SharePage() {
       : [];
 
   const endingLines = [
-    `Plans end on ${formatDay(monthEnd)}.`,
+    `${group.name}: plans end on ${formatDay(monthEnd)}.`,
     "Renew for next month any time in your app, by bank transfer or cash. Thank you!",
   ];
 
@@ -106,6 +124,10 @@ export default async function SharePage() {
 
       <div className="stack">
         <MessageCard title="This week's sessions" lines={weekLines} />
+
+        {nextWeekSessions.length > 0 ? (
+          <MessageCard title="Next week's sessions" lines={nextWeekLines} />
+        ) : null}
 
         {tomorrowSessions.length > 0 ? (
           <MessageCard title="Reminder for tomorrow" lines={tomorrowLines} />

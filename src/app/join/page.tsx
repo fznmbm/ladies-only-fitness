@@ -1,4 +1,5 @@
 import { requestToJoin } from "./actions";
+import { joinableGroup } from "@/lib/joinableGroup";
 import { PageHead } from "@/components/PageHead";
 import { SubmitButton } from "@/components/SubmitButton";
 
@@ -8,6 +9,7 @@ export default async function JoinPage({
   searchParams,
 }: {
   searchParams: Promise<{
+    g?: string;
     code?: string;
     sent?: string;
     problem?: string;
@@ -16,6 +18,7 @@ export default async function JoinPage({
   }>;
 }) {
   const {
+    g = "",
     code = "",
     sent,
     problem,
@@ -23,7 +26,8 @@ export default async function JoinPage({
     phone = "",
   } = await searchParams;
   const needed = process.env.JOIN_CODE;
-  const allowed = !needed || code === needed;
+  const group = await joinableGroup(g);
+  const allowed = (!needed || code === needed) && !!group;
 
   return (
     <main className="shell">
@@ -46,7 +50,7 @@ export default async function JoinPage({
       ) : (
         <>
           <PageHead
-            title="Join the group"
+            title={`Join ${group!.name}`}
             sub="Ladies only. The organiser approves everyone before they can use the app."
           />
           <form
@@ -66,6 +70,7 @@ export default async function JoinPage({
               </div>
             ) : null}
             <input type="hidden" name="code" value={code} />
+            <input type="hidden" name="g" value={g} />
             <div className="hp" aria-hidden="true">
               <label htmlFor="website">Leave this empty</label>
               <input

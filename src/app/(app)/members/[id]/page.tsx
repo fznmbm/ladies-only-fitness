@@ -3,7 +3,8 @@ import { notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { formatDate, formatTime, monthName } from "@/lib/dates";
 import { pounds } from "@/lib/money";
-import { deleteMember, updateMember } from "@/app/actions";
+import { deleteMember, setMemberGroup, updateMember } from "@/app/actions";
+import { getGroupContext } from "@/lib/groups";
 import { Icon } from "@/components/Icon";
 import { PageHead } from "@/components/PageHead";
 import { SubmitButton } from "@/components/SubmitButton";
@@ -23,13 +24,18 @@ export default async function MemberPage({
   const { error } = await searchParams;
   const supabase = await createClient();
 
-  // All three at once, instead of one after another.
-  const [{ data: memberRow }, { data: subsData }, { data: attData }] =
-    await Promise.all([
+  // Everything at once, instead of one after another.
+  const [
+    { data: memberRow },
+    { data: subsData },
+    { data: attData },
+    { data: groupRows },
+    { groups },
+  ] = await Promise.all([
       supabase.from("members").select("*").eq("id", id).maybeSingle(),
       supabase
         .from("subscriptions")
-        .select("*")
+        .select("*, groups(name)")
         .eq("member_id", id)
         .neq("status", "rejected")
         .order("month", { ascending: false })
@@ -37,25 +43,44 @@ export default async function MemberPage({
       supabase
         .from("attendance")
         .select(
-          "id, flag, resolution, extra_paid_pence, sessions(session_date, start_time)",
+          "id, flag, resolution, extra_paid_pence, sessions(session_date, start_time, groups(name))",
         )
         .eq("member_id", id)
         // Newest first in the database, so the 20 shown really are the latest.
         .order("sessions(session_date)", { ascending: false })
         .order("sessions(start_time)", { ascending: false })
         .limit(20),
+      supabase
+        .from("member_groups")
+        .select("group_id, status")
+        .eq("member_id", id),
+      getGroupContext(),
     ]);
   if (!memberRow) notFound();
   const member = memberRow as Member;
 
-  const subs = (subsData ?? []) as Subscription[];
+  const subs = (subsData ?? []) as (Subscription & {
+    groups: { name: string } | null;
+  })[];
+  const inGroup = new Map(
+    ((groupRows ?? []) as { group_id: string; status: string }[]).map((r) => [
+      r.group_id,
+      r.status,
+    ]),
+  );
+  const liveGroups = groups.filter((g) => g.active);
+  const manyGroups = liveGroups.length > 1;
   const visits = (
     (attData ?? []) as unknown as {
       id: string;
       flag: string | null;
       resolution: string | null;
       extra_paid_pence: number;
-      sessions: { session_date: string; start_time: string };
+      sessions: {
+        session_date: string;
+        start_time: string;
+        groups: { name: string } | null;
+      };
     }[]
   )
     .sort((a, b) =>
@@ -133,6 +158,46 @@ export default async function MemberPage({
         </>
       ) : null}
 
+      <h2 className="section-title">Groups</h2>
+      <ul className="list">
+        {liveGroups.map((g) => {
+          const status = inGroup.get(g.id);
+          return (
+            <li key={g.id} className="row-main" style={{ minHeight: 60 }}>
+              <div className="grow">
+                <div className="name">{g.name}</div>
+                <div className="sub">
+                  {status === "active"
+                    ? "Member"
+                    : status === "pending"
+                      ? "Asked to join, see Members"
+                      : "Not in this group"}
+                </div>
+              </div>
+              <form action={setMemberGroup}>
+                <input type="hidden" name="memberId" value={member.id} />
+                <input type="hidden" name="groupId" value={g.id} />
+                <input
+                  type="hidden"
+                  name="in"
+                  value={status === "active" ? "false" : "true"}
+                />
+                <SubmitButton
+                  className={
+                    status === "active"
+                      ? "btn btn-quiet btn-small"
+                      : "btn btn-outline btn-small"
+                  }
+                  pendingText="…"
+                >
+                  {status === "active" ? "Remove" : "Add"}
+                </SubmitButton>
+              </form>
+            </li>
+          );
+        })}
+      </ul>
+
       <h2 className="section-title">Payments</h2>
       {subs.length === 0 ? (
         <div className="card empty">No payments yet.</div>
@@ -141,7 +206,10 @@ export default async function MemberPage({
           {subs.map((s) => (
             <li key={s.id} className="row-main">
               <div className="grow">
-                <div className="name">{monthName(s.month)}</div>
+                <div className="name">
+                  {monthName(s.month)}
+                  {manyGroups && s.groups ? `, ${s.groups.name}` : ""}
+                </div>
                 <div className="sub">
                   {s.sessions_per_week} a week,{" "}
                   {s.method === "cash" ? "cash" : "bank transfer"}
@@ -165,6 +233,9 @@ export default async function MemberPage({
                 <div className="name">
                   {formatDate(v.sessions.session_date)},{" "}
                   {formatTime(v.sessions.start_time)}
+                  {manyGroups && v.sessions.groups
+                    ? `, ${v.sessions.groups.name}`
+                    : ""}
                 </div>
                 {v.flag ? (
                   <div className="sub warn">

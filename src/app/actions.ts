@@ -1,21 +1,17 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { createClient, type Db } from "@/lib/supabase/server";
-//import { memberContext } from "@/lib/coverage";
-import {
-  addDays,
-  addMonths,
-  monthStart,
-  todayISO,
-  weekStart,
-} from "@/lib/dates";
+import { addMonths, monthStart, todayISO } from "@/lib/dates";
 import { toPence } from "@/lib/money";
 import { groupName, siteOrigin } from "@/lib/config";
 import { hashToken, newToken } from "@/lib/memberAuth";
-import { whatsappUrl } from "@/lib/phone";
+import { normalizePhone, whatsappUrl } from "@/lib/phone";
 import { deleteMemberReceipts } from "@/lib/b2";
+import { ensureSessions } from "@/lib/sessions";
+import { GROUP_COOKIE, requireGroup } from "@/lib/groups";
 import type { Plan } from "@/lib/types";
 
 function refresh() {
@@ -30,11 +26,20 @@ function check(error: { message: string } | null) {
   if (error) throw new Error(error.message);
 }
 
-/** Once someone pays for a month, "pay later" visits in that month are settled. */
-async function settlePayLater(supabase: Db, memberId: string, month: string) {
+/**
+ * Once someone pays for a month in a group, her "pay later" visits to that
+ * group's sessions in that month are settled.
+ */
+async function settlePayLater(
+  supabase: Db,
+  memberId: string,
+  groupId: string,
+  month: string,
+) {
   const { data: sessions } = await supabase
     .from("sessions")
     .select("id")
+    .eq("group_id", groupId)
     .gte("session_date", month)
     .lt("session_date", addMonths(month, 1));
   const ids = ((sessions ?? []) as { id: string }[]).map((s) => s.id);
@@ -47,66 +52,209 @@ async function settlePayLater(supabase: Db, memberId: string, month: string) {
     .in("session_id", ids);
 }
 
+/** Puts a lady in a group (or approves her request to join it). */
+async function joinGroup(supabase: Db, memberId: string, groupId: string) {
+  const { error } = await supabase
+    .from("member_groups")
+    .upsert(
+      { member_id: memberId, group_id: groupId, status: "active" },
+      { onConflict: "member_id,group_id" },
+    );
+  check(error);
+}
+
+// ---------- Groups ----------
+
+/** The group switcher at the top of the organiser's screens. */
+export async function setCurrentGroup(formData: FormData) {
+  const id = str(formData, "groupId");
+  if (id) {
+    (await cookies()).set(GROUP_COOKIE, id, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "lax",
+      path: "/",
+      maxAge: 60 * 60 * 24 * 365,
+    });
+  }
+  refresh();
+  const back = str(formData, "back");
+  // Only ever go back to one of the app's own organiser pages.
+  redirect(/^\/(sessions|members|payments|share|settings)(\/|$)/.test(back) ? back.split("?")[0] : "/sessions");
+}
+
+export async function addGroup(formData: FormData) {
+  const supabase = await createClient();
+  const name = str(formData, "name");
+  if (!name) return;
+  const { data, error } = await supabase
+    .from("groups")
+    .insert({ name, sort: 100 })
+    .select("id")
+    .single();
+  check(error);
+  if (!data) return;
+  // Switch straight to the new group, so its plans and timetable can be set up.
+  (await cookies()).set(GROUP_COOKIE, data.id, {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === "production",
+    sameSite: "lax",
+    path: "/",
+    maxAge: 60 * 60 * 24 * 365,
+  });
+  refresh();
+}
+
+export async function renameGroup(formData: FormData) {
+  const supabase = await createClient();
+  const name = str(formData, "name");
+  if (!name) return;
+  const { error } = await supabase
+    .from("groups")
+    .update({ name })
+    .eq("id", str(formData, "id"));
+  check(error);
+  refresh();
+}
+
+export async function setGroupActive(formData: FormData) {
+  const supabase = await createClient();
+  const active = str(formData, "active") === "true";
+  if (!active) {
+    // There must always be at least one group in use.
+    const { count } = await supabase
+      .from("groups")
+      .select("id", { count: "exact", head: true })
+      .eq("active", true);
+    if ((count ?? 0) <= 1)
+      redirect(
+        "/settings?error=" +
+          encodeURIComponent("You need at least one group in use."),
+      );
+  }
+  const { error } = await supabase
+    .from("groups")
+    .update({ active })
+    .eq("id", str(formData, "id"));
+  check(error);
+  refresh();
+}
+
 // ---------- Sessions ----------
 
+/** The "Add sessions from the weekly timetable" button. A nightly job does the same. */
 export async function generateSessions() {
   const supabase = await createClient();
-  const { data: slots } = await supabase.from("schedule_slots").select("*");
-  if (!slots || slots.length === 0) return;
-
-  const today = todayISO();
-  const start = weekStart(today);
-  const rows: { session_date: string; start_time: string; title: string }[] =
-    [];
-  for (let week = 0; week < 4; week++) {
-    for (const s of slots as {
-      weekday: number;
-      start_time: string;
-      title: string;
-    }[]) {
-      const date = addDays(start, week * 7 + (s.weekday - 1));
-      if (date < today) continue;
-      rows.push({
-        session_date: date,
-        start_time: s.start_time,
-        title: s.title,
-      });
-    }
-  }
-  if (rows.length > 0) {
-    const { error } = await supabase.from("sessions").upsert(rows, {
-      onConflict: "session_date,start_time",
-      ignoreDuplicates: true,
-    });
-    check(error);
-  }
+  await ensureSessions(supabase);
   refresh();
 }
 
 export async function addSession(formData: FormData) {
   const supabase = await createClient();
+  const group = await requireGroup();
   const date = str(formData, "date");
   const time = str(formData, "time");
   if (!date || !time) return;
-  const { error } = await supabase.from("sessions").upsert(
-    {
-      session_date: date,
-      start_time: time,
-      title: str(formData, "title") || "Workout session",
-    },
-    { onConflict: "session_date,start_time", ignoreDuplicates: true },
-  );
-  check(error);
+  const { error } = await supabase.from("sessions").insert({
+    group_id: group.id,
+    session_date: date,
+    start_time: time,
+    title: str(formData, "title") || "Workout session",
+  });
+  if (error && !error.message.includes("sessions_group_date_time")) check(error);
   refresh();
 }
 
-export async function setCancelled(formData: FormData) {
+/**
+ * Moves one session to another date or time (or renames it), for example when
+ * the hall isn't available that week. "I'm coming" answers are cleared if the
+ * date or time changes, because they were for the old time. The nightly job
+ * won't put the original back.
+ */
+export async function moveSession(formData: FormData) {
   const supabase = await createClient();
+  const id = str(formData, "sessionId");
+  const date = str(formData, "date");
+  const time = str(formData, "time").slice(0, 5);
+  const title = str(formData, "title") || "Workout session";
+  const back = (msg: string) =>
+    redirect(`/sessions/${id}?error=` + encodeURIComponent(msg));
+
+  const [{ data: session }, { count: attended }] = await Promise.all([
+    supabase
+      .from("sessions")
+      .select("session_date, start_time, cancelled")
+      .eq("id", id)
+      .maybeSingle(),
+    supabase
+      .from("attendance")
+      .select("id", { count: "exact", head: true })
+      .eq("session_id", id),
+  ]);
+  if (!session) back("That session no longer exists.");
+  if (!date || !/^\d{2}:\d{2}$/.test(time)) back("Choose a date and a time.");
+  if ((attended ?? 0) > 0)
+    back("Ladies have already been marked here, so this session can't be moved.");
+  if (date < todayISO()) back("A session can't be moved into the past.");
+
+  const oldDate = session!.session_date as string;
+  const oldTime = String(session!.start_time).slice(0, 5);
+  const moved = oldDate !== date || oldTime !== time;
+
   const { error } = await supabase
     .from("sessions")
-    .update({ cancelled: str(formData, "cancelled") === "true" })
-    .eq("id", str(formData, "sessionId"));
+    .update({ session_date: date, start_time: time, title })
+    .eq("id", id);
+  if (error)
+    back(
+      error.message.includes("sessions_group_date_time")
+        ? "There's already a session at that date and time."
+        : error.message,
+    );
+
+  if (moved) {
+    const { error: e2 } = await supabase.from("rsvps").delete().eq("session_id", id);
+    check(e2);
+  }
+  refresh();
+  redirect(
+    moved
+      ? `/sessions/${id}?moved=${oldDate}T${oldTime}`
+      : `/sessions/${id}`,
+  );
+}
+
+/** Cancels one session, with an optional reason the ladies will see. */
+export async function cancelSession(formData: FormData) {
+  const supabase = await createClient();
+  const id = str(formData, "sessionId");
+  const reason = str(formData, "reason").slice(0, 120) || null;
+  const { error } = await supabase
+    .from("sessions")
+    .update({ cancelled: true, cancel_reason: reason })
+    .eq("id", id);
   check(error);
+  refresh();
+  redirect(`/sessions/${id}?cancelled=1`);
+}
+
+/** Brings a cancelled session back. */
+export async function restoreSession(formData: FormData) {
+  const supabase = await createClient();
+  const id = str(formData, "sessionId");
+  const { error } = await supabase
+    .from("sessions")
+    .update({ cancelled: false, cancel_reason: null })
+    .eq("id", id);
+  if (error)
+    redirect(
+      `/sessions/${id}?error=` +
+        encodeURIComponent(
+          error.message.includes("sessions_group_date_time")
+            ? "Another session has been added at that date and time, so this one can't come back."
+            : error.message,
+        ),
+    );
   refresh();
 }
 
@@ -114,7 +262,7 @@ export async function setCancelled(formData: FormData) {
 
 /**
  * Tap "Here": marks her present, or takes it back if she is already marked.
- * The database does the whole check in one call (see migration 004).
+ * The database does the whole check in one call (see migration 009).
  * If cash was taken for this visit, it is kept rather than removed.
  */
 export async function toggleHere(formData: FormData) {
@@ -185,16 +333,18 @@ export async function cashPlan(formData: FormData) {
       .single(),
     supabase
       .from("sessions")
-      .select("session_date")
+      .select("session_date, group_id")
       .eq("id", sessionId)
       .single(),
   ]);
   if (!plan || !session) return;
   const p = plan as Plan;
+  if (p.group_id !== session.group_id) return;
   const month = monthStart(session.session_date);
 
   const { error } = await supabase.from("subscriptions").insert({
     member_id: memberId,
+    group_id: session.group_id,
     plan_id: p.id,
     month,
     sessions_per_week: p.sessions_per_week,
@@ -210,7 +360,7 @@ export async function cashPlan(formData: FormData) {
     .update({ resolution: "cash" })
     .eq("id", attendanceId);
   check(e2);
-  await settlePayLater(supabase, memberId, month);
+  await settlePayLater(supabase, memberId, session.group_id, month);
   refresh();
 }
 
@@ -218,11 +368,22 @@ export async function addWalkIn(formData: FormData) {
   const supabase = await createClient();
   const sessionId = str(formData, "sessionId");
   const name = str(formData, "name");
-  const phone = str(formData, "phone") || null;
+  // Tidied the same way the database stores it, so "07700 900123" finds
+  // someone saved as "+447700900123".
+  const typed = str(formData, "phone");
+  const phone = normalizePhone(typed) ?? (typed || null);
   if (!name || !sessionId) return;
 
+  // Same rule as the "Here" button: no marking cancelled or future sessions.
+  const { data: session } = await supabase
+    .from("sessions")
+    .select("session_date, cancelled, group_id")
+    .eq("id", sessionId)
+    .maybeSingle();
+  if (!session || session.cancelled || session.session_date > todayISO()) return;
+
   // Same number as someone already in the app? Mark her here under her existing
-  // name instead of adding her twice (which used to crash the page).
+  // name instead of adding her twice, and add her to this group if she isn't in it.
   if (phone) {
     const { data: existing } = await supabase
       .from("members")
@@ -242,6 +403,7 @@ export async function addWalkIn(formData: FormData) {
           .eq("id", existing.id);
         check(error);
       }
+      await joinGroup(supabase, existing.id, session.group_id);
       const { data: already } = await supabase
         .from("attendance")
         .select("id")
@@ -268,6 +430,7 @@ export async function addWalkIn(formData: FormData) {
     .single();
   check(error);
   if (!member) return;
+  await joinGroup(supabase, member.id, session.group_id);
 
   const { error: e2 } = await supabase
     .from("attendance")
@@ -278,14 +441,19 @@ export async function addWalkIn(formData: FormData) {
 
 // ---------- Members ----------
 
+/** Adds a lady to the group being viewed. */
 export async function addMember(formData: FormData) {
   const supabase = await createClient();
+  const group = await requireGroup();
   const name = str(formData, "name");
   if (!name) return;
-  const { error } = await supabase
+  const { data, error } = await supabase
     .from("members")
-    .insert({ name, phone: str(formData, "phone") || null, status: "active" });
+    .insert({ name, phone: str(formData, "phone") || null, status: "active" })
+    .select("id")
+    .single();
   if (error) redirect("/members?error=" + encodeURIComponent(error.message));
+  await joinGroup(supabase, data!.id, group.id);
   refresh();
 }
 
@@ -306,9 +474,27 @@ export async function updateMember(formData: FormData) {
   refresh();
 }
 
+/** On a member's page: add her to a group, or take her out of one. */
+export async function setMemberGroup(formData: FormData) {
+  const supabase = await createClient();
+  const memberId = str(formData, "memberId");
+  const groupId = str(formData, "groupId");
+  if (str(formData, "in") === "true") {
+    await joinGroup(supabase, memberId, groupId);
+  } else {
+    const { error } = await supabase
+      .from("member_groups")
+      .delete()
+      .eq("member_id", memberId)
+      .eq("group_id", groupId);
+    check(error);
+  }
+  refresh();
+}
+
 /**
- * Deletes a lady for good: her details, payments, visits and RSVPs (the database
- * removes those with her), then her receipt photos from B2.
+ * Deletes a lady for good: her details, groups, payments, visits and RSVPs (the
+ * database removes those with her), then her receipt photos from B2.
  * For someone who has just stopped coming, "No longer attending" is usually better,
  * because it keeps her payment history.
  */
@@ -368,6 +554,7 @@ export async function recordPayment(formData: FormData) {
 
   const { error } = await supabase.from("subscriptions").insert({
     member_id: memberId,
+    group_id: p.group_id,
     plan_id: p.id,
     month,
     sessions_per_week: p.sessions_per_week,
@@ -378,11 +565,11 @@ export async function recordPayment(formData: FormData) {
   });
   if (error) {
     const msg = error.message.includes("subscriptions_one_per_month")
-      ? "She already has a plan for that month."
+      ? "She already has a plan in this group for that month."
       : error.message;
     redirect("/payments?error=" + encodeURIComponent(msg));
   }
-  await settlePayLater(supabase, memberId, month);
+  await settlePayLater(supabase, memberId, p.group_id, month);
   refresh();
   redirect("/payments?month=" + month);
 }
@@ -403,7 +590,7 @@ export async function confirmPayment(formData: FormData) {
   const id = str(formData, "id");
   const { data: sub } = await supabase
     .from("subscriptions")
-    .select("member_id, month")
+    .select("member_id, group_id, month")
     .eq("id", id)
     .single();
   const { error } = await supabase
@@ -411,11 +598,11 @@ export async function confirmPayment(formData: FormData) {
     .update({ status: "confirmed", confirmed_at: new Date().toISOString() })
     .eq("id", id);
   check(error);
-  if (sub) await settlePayLater(supabase, sub.member_id, sub.month);
+  if (sub) await settlePayLater(supabase, sub.member_id, sub.group_id, sub.month);
   refresh();
 }
 
-// ---------- Settings ----------
+// ---------- Settings: plans ----------
 
 export async function savePlan(formData: FormData) {
   const supabase = await createClient();
@@ -431,11 +618,14 @@ export async function savePlan(formData: FormData) {
   refresh();
 }
 
+/** Adds a plan to the group being viewed. */
 export async function addPlan(formData: FormData) {
   const supabase = await createClient();
+  const group = await requireGroup();
   const sessions = Number(str(formData, "sessions")) || 1;
   const name = str(formData, "name") || `${sessions} a week`;
   const { error } = await supabase.from("plans").insert({
+    group_id: group.id,
     name,
     sessions_per_week: sessions,
     price_pence: toPence(str(formData, "price")),
@@ -455,33 +645,56 @@ export async function setPlanActive(formData: FormData) {
   refresh();
 }
 
+// ---------- Settings: weekly timetable ----------
+
+/** Adds a weekly session to the group being viewed, and creates its sessions. */
 export async function addSlot(formData: FormData) {
   const supabase = await createClient();
+  const group = await requireGroup();
   const time = str(formData, "time");
   if (!time) return;
   const { error } = await supabase.from("schedule_slots").insert({
+    group_id: group.id,
     weekday: Number(str(formData, "weekday")) || 1,
     start_time: time,
     title: str(formData, "title") || "Workout session",
   });
   check(error);
+  await ensureSessions(supabase);
   refresh();
+  redirect("/settings?timetable=added");
 }
 
-export async function deleteSlot(formData: FormData) {
+/** Changes a weekly session. Its upcoming sessions follow (see migration 009). */
+export async function updateSlot(formData: FormData) {
   const supabase = await createClient();
-  const { error } = await supabase
-    .from("schedule_slots")
-    .delete()
-    .eq("id", str(formData, "id"));
+  const { data, error } = await supabase.rpc("update_slot", {
+    p_slot_id: str(formData, "id"),
+    p_weekday: Number(str(formData, "weekday")) || 1,
+    p_start_time: str(formData, "time"),
+    p_title: str(formData, "title") || "Workout session",
+  });
   check(error);
   refresh();
+  redirect(`/settings?timetable=changed&n=${Number(data) || 0}`);
+}
+
+/** Removes a weekly session and its upcoming sessions nobody has attended yet. */
+export async function deleteSlot(formData: FormData) {
+  const supabase = await createClient();
+  const { data, error } = await supabase.rpc("remove_slot", {
+    p_slot_id: str(formData, "id"),
+  });
+  check(error);
+  refresh();
+  redirect(`/settings?timetable=removed&n=${Number(data) || 0}`);
 }
 
 // ---------- Ladies' personal links ----------
 
 export type LinkState =
   | { url: string; wa: string | null }
+  | { ok: string }
   | { error: string }
   | null;
 
@@ -517,29 +730,72 @@ export async function makeLoginLink(
   return issueLink(supabase, str(formData, "memberId"));
 }
 
+/**
+ * Approves a lady's request to join a group. A new lady gets her personal link.
+ * Someone already using the app just sees the new group in it, and keeps her
+ * current link (a new one would stop her installed app from working).
+ */
 export async function approveRequest(
   _prev: LinkState,
   formData: FormData,
 ): Promise<LinkState> {
   const supabase = await createClient();
   const memberId = str(formData, "memberId");
-  const { error } = await supabase
+  const groupId = str(formData, "groupId");
+
+  const { data: member } = await supabase
     .from("members")
-    .update({ status: "active", approved_at: new Date().toISOString() })
+    .select("status, login_token_hash")
     .eq("id", memberId)
-    .eq("status", "pending");
-  if (error) return { error: error.message };
+    .maybeSingle();
+  if (!member) return { error: "Couldn't find that request." };
+
+  const { error: e1 } = await supabase
+    .from("member_groups")
+    .update({ status: "active" })
+    .eq("member_id", memberId)
+    .eq("group_id", groupId);
+  if (e1) return { error: e1.message };
+
+  if (member.status !== "active") {
+    const { error } = await supabase
+      .from("members")
+      .update({ status: "active", approved_at: new Date().toISOString() })
+      .eq("id", memberId);
+    if (error) return { error: error.message };
+  }
   // No refresh here on purpose: the row stays on screen so the link can be sent.
+  if (member.login_token_hash)
+    return { ok: "She's in. The group now shows in her app." };
   return issueLink(supabase, memberId);
 }
 
+/**
+ * Declines a request to join a group. A brand-new lady (in no other group)
+ * is removed completely; anyone else just isn't added to this group.
+ */
 export async function declineRequest(formData: FormData) {
   const supabase = await createClient();
+  const memberId = str(formData, "memberId");
+  const groupId = str(formData, "groupId");
   const { error } = await supabase
-    .from("members")
+    .from("member_groups")
     .delete()
-    .eq("id", str(formData, "memberId"))
+    .eq("member_id", memberId)
+    .eq("group_id", groupId)
     .eq("status", "pending");
   check(error);
+  const { count } = await supabase
+    .from("member_groups")
+    .select("group_id", { count: "exact", head: true })
+    .eq("member_id", memberId);
+  if ((count ?? 0) === 0) {
+    const { error: e2 } = await supabase
+      .from("members")
+      .delete()
+      .eq("id", memberId)
+      .eq("status", "pending");
+    check(e2);
+  }
   refresh();
 }

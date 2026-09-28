@@ -17,6 +17,15 @@ export async function setRsvp(formData: FormData) {
   if (!sessionId) return;
 
   const admin = createAdminClient();
+  // Only sessions still to come, not cancelled, in one of her own groups.
+  const { data: session } = await admin
+    .from("sessions")
+    .select("session_date, cancelled, group_id")
+    .eq("id", sessionId)
+    .maybeSingle();
+  if (!session || session.cancelled || session.session_date < todayISO()) return;
+  if (!(await inGroup(member.id, session.group_id))) return;
+
   const { error } = await admin
     .from("rsvps")
     .upsert(
@@ -45,6 +54,18 @@ export async function clearRsvp(formData: FormData) {
   if (error) throw new Error(error.message);
 
   revalidatePath("/me");
+}
+
+/** True if she's an approved member of this group. */
+async function inGroup(memberId: string, groupId: string): Promise<boolean> {
+  const { data } = await createAdminClient()
+    .from("member_groups")
+    .select("group_id")
+    .eq("member_id", memberId)
+    .eq("group_id", groupId)
+    .eq("status", "active")
+    .maybeSingle();
+  return !!data;
 }
 
 const MAX_RECEIPT_BYTES = 8 * 1024 * 1024;
@@ -83,29 +104,34 @@ export async function payForMonth(
   }
 
   const admin = createAdminClient();
-  // Check the plan, and that she hasn't already paid for that month,
-  // before uploading anything, so no photo is stored for nothing.
-  const [{ data: plan }, { data: existing }] = await Promise.all([
-    admin
-      .from("plans")
-      .select("*")
-      .eq("id", planId)
-      .eq("active", true)
-      .maybeSingle(),
+  // Check the plan is one of her groups', and that she hasn't already paid for
+  // that group and month, before uploading anything, so no photo is stored for
+  // nothing.
+  const { data: plan } = await admin
+    .from("plans")
+    .select("*")
+    .eq("id", planId)
+    .eq("active", true)
+    .maybeSingle();
+  if (!plan) return { error: "Please choose a plan." };
+  const p = plan as Plan;
+  const [allowed, { data: existing }] = await Promise.all([
+    inGroup(member.id, p.group_id),
     admin
       .from("subscriptions")
       .select("id")
       .eq("member_id", member.id)
+      .eq("group_id", p.group_id)
       .eq("month", month)
       .in("status", ["pending", "confirmed"])
       .limit(1),
   ]);
-  if (!plan) return { error: "Please choose a plan." };
+  if (!allowed) return { error: "Please choose a plan." };
   if (existing && existing.length > 0)
     return {
-      error: "You already have a payment for that month, waiting or confirmed.",
+      error:
+        "You already have a payment for that group and month, waiting or confirmed.",
     };
-  const p = plan as Plan;
 
   let receiptPath: string;
   try {
@@ -119,6 +145,7 @@ export async function payForMonth(
 
   const { error } = await admin.from("subscriptions").insert({
     member_id: member.id,
+    group_id: p.group_id,
     plan_id: p.id,
     month,
     sessions_per_week: p.sessions_per_week,
@@ -133,7 +160,7 @@ export async function payForMonth(
     if (error.message.includes("subscriptions_one_per_month")) {
       return {
         error:
-          "You already have a payment for that month, waiting or confirmed.",
+          "You already have a payment for that group and month, waiting or confirmed.",
       };
     }
     return { error: "Couldn't save that. Please try again." };

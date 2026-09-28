@@ -6,9 +6,13 @@ import { NextResponse, type NextRequest } from "next/server";
 function isPublic(path: string): boolean {
   return (
     path === "/" ||
-    path.startsWith("/join") ||
+    path === "/join" ||
     path.startsWith("/m/") ||
-    path.startsWith("/me") ||
+    // Exactly /me or /me/…, so organiser pages like /members stay protected.
+    path === "/me" ||
+    path.startsWith("/me/") ||
+    // The nightly job that creates sessions checks its own secret.
+    path.startsWith("/api/cron/") ||
     path === "/manifest.webmanifest"
   );
 }

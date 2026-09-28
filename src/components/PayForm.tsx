@@ -2,14 +2,18 @@
 
 import { useActionState, useState } from "react";
 import { payForMonth } from "@/app/me/actions";
+import { shrinkImage } from "@/lib/shrinkImage";
 import { pounds } from "@/lib/money";
 import { Icon } from "./Icon";
+import { SubmitButton } from "./SubmitButton";
 import type { Plan } from "@/lib/types";
 
 type Bank = { name: string; sortCode: string; accountNumber: string };
 
 type Props = {
   plans: Plan[];
+  /** Her groups. With more than one, she first picks which group she's paying for. */
+  groups: { id: string; name: string }[];
   bank: Bank;
   months: { value: string; label: string }[];
   defaultMonth: string;
@@ -18,6 +22,7 @@ type Props = {
 
 export function PayForm({
   plans,
+  groups,
   bank,
   months,
   defaultMonth,
@@ -25,6 +30,8 @@ export function PayForm({
 }: Props) {
   const [state, action, pending] = useActionState(payForMonth, null);
   const [fileName, setFileName] = useState<string | null>(null);
+  const [groupId, setGroupId] = useState(groups[0]?.id ?? "");
+  const groupPlans = plans.filter((p) => p.group_id === groupId);
 
   if (state && "ok" in state) {
     return (
@@ -39,14 +46,42 @@ export function PayForm({
   }
 
   return (
-    <form action={action} className="stack">
+    <form
+      action={async (formData) => {
+        // Shrink the photo on her phone first, so it uploads fast and fits.
+        const receipt = formData.get("receipt");
+        if (receipt instanceof File && receipt.size > 0) {
+          formData.set("receipt", await shrinkImage(receipt));
+        }
+        action(formData);
+      }}
+      className="stack"
+    >
+      {groups.length > 1 ? (
+        <div className="field">
+          <label htmlFor="payGroup">Group</label>
+          <select
+            id="payGroup"
+            value={groupId}
+            onChange={(e) => setGroupId(e.target.value)}
+          >
+            {groups.map((g) => (
+              <option key={g.id} value={g.id}>
+                {g.name}
+              </option>
+            ))}
+          </select>
+        </div>
+      ) : null}
+
       <div className="field">
         <label htmlFor="planId">Plan</label>
-        <select id="planId" name="planId" required defaultValue="">
+        {/* A new list for each group, so a plan from another group can't stay picked. */}
+        <select key={groupId} id="planId" name="planId" required defaultValue="">
           <option value="" disabled>
-            Choose a plan
+            {groupPlans.length > 0 ? "Choose a plan" : "No plans for this group yet"}
           </option>
-          {plans.map((p) => (
+          {groupPlans.map((p) => (
             <option key={p.id} value={p.id}>
               {p.name}, {pounds(p.price_pence)} a month
             </option>
@@ -97,15 +132,15 @@ export function PayForm({
         </div>
       ) : null}
 
-      <button
-        type="submit"
+      <SubmitButton
         className="btn btn-primary btn-block"
         style={{ minHeight: 52 }}
         disabled={pending}
+        pendingText="Sending…"
       >
         <Icon name="upload" size={18} />
-        {pending ? "Sending…" : "I've paid: send receipt"}
-      </button>
+        I&apos;ve paid: send receipt
+      </SubmitButton>
     </form>
   );
 }

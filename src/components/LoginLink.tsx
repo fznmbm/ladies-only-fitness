@@ -35,6 +35,14 @@ function SendBox({ state }: { state: LinkState }) {
       </div>
     );
   }
+  if ("ok" in state) {
+    return (
+      <div className="note">
+        <Icon name="check" />
+        <span>{state.ok}</span>
+      </div>
+    );
+  }
   return (
     <div className="sendbox">
       <p className="small">Her personal link is ready. Send it on WhatsApp.</p>
@@ -85,7 +93,15 @@ export function LoginLinkButton({
   );
 }
 
-type JoinRequest = { id: string; name: string; phone: string | null };
+type JoinRequest = {
+  id: string;
+  name: string;
+  phone: string | null;
+  /** The group she's asking to join. */
+  groupId: string;
+  /** True if she's already in another group (so she already has the app). */
+  existing: boolean;
+};
 
 /**
  * The "Asking to join" list. Once approved, a lady stays on screen with her link
@@ -126,10 +142,12 @@ function RequestRow({
   id,
   name,
   phone,
+  groupId,
+  existing,
   onApproved,
 }: JoinRequest & { onApproved: () => void }) {
   const [state, action, pending] = useActionState(approveRequest, null);
-  const approved = !!state && "url" in state;
+  const approved = !!state && ("url" in state || "ok" in state);
   useEffect(() => {
     if (approved) onApproved();
     // Only when she first becomes approved.
@@ -141,7 +159,10 @@ function RequestRow({
         <Avatar name={name} />
         <div className="grow">
           <div className="name">{name}</div>
-          <div className="sub">{phone ?? "No number"}</div>
+          <div className="sub">
+            {phone ?? "No number"}
+            {existing ? ", already in another group" : ""}
+          </div>
         </div>
         {approved ? (
           <span className="chip">
@@ -151,6 +172,7 @@ function RequestRow({
           <div className="cluster" style={{ flexWrap: "nowrap" }}>
             <form action={action}>
               <input type="hidden" name="memberId" value={id} />
+              <input type="hidden" name="groupId" value={groupId} />
               <button
                 type="submit"
                 className="btn btn-primary btn-small"
@@ -161,6 +183,7 @@ function RequestRow({
             </form>
             <form action={declineRequest}>
               <input type="hidden" name="memberId" value={id} />
+              <input type="hidden" name="groupId" value={groupId} />
               <button
                 type="submit"
                 className="btn btn-quiet btn-small"

@@ -6,6 +6,7 @@ import {
   formatDay,
   formatTime,
   monthStart,
+  todayISO,
   weekStart,
 } from "@/lib/dates";
 import { planLine } from "@/lib/coverage";
@@ -15,11 +16,15 @@ import {
   allowOverPlan,
   cashExtra,
   cashPlan,
+  cancelSession,
+  moveSession,
   payLater,
-  setCancelled,
+  restoreSession,
   toggleHere,
   undoHere,
 } from "@/app/actions";
+import { getGroupContext } from "@/lib/groups";
+import { ShareToWhatsApp } from "@/components/ShareToWhatsApp";
 import { Avatar } from "@/components/Avatar";
 import { Icon } from "@/components/Icon";
 import { PageHead } from "@/components/PageHead";
@@ -144,48 +149,76 @@ export default async function RegisterPage({
   searchParams,
 }: {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ q?: string }>;
+  searchParams: Promise<{
+    q?: string;
+    moved?: string;
+    cancelled?: string;
+    error?: string;
+  }>;
 }) {
   const { id } = await params;
-  const { q } = await searchParams;
+  const { q, moved, cancelled: justCancelled, error } = await searchParams;
   const supabase = await createClient();
 
-  // Round 1: the session, the ladies, the plans and who said they're coming, all at once.
+  // Round 1: the session, who said they're coming, and the groups.
+  const [{ data: sessionRow }, { data: rsvpData }, { groups }] =
+    await Promise.all([
+      supabase.from("sessions").select("*").eq("id", id).maybeSingle(),
+      supabase.from("rsvps").select("member_id, coming").eq("session_id", id),
+      getGroupContext(),
+    ]);
+  if (!sessionRow) notFound();
+  const session = sessionRow as Session;
+  const groupNameOf = groups.find((g) => g.id === session.group_id)?.name ?? "";
+
+  // Ladies can only be marked here on the day or afterwards (to correct it),
+  // never in advance, and never for a cancelled session.
+  const today = todayISO();
+  const isFuture = session.session_date > today;
+  const isPast = session.session_date < today;
+  const locked = isFuture || session.cancelled;
+
+  // Round 2: this group's ladies, plans, payments for the month and visits
+  // that week, all at once.
+  const ws = weekStart(session.session_date);
   const [
-    { data: sessionRow },
     { data: membersData },
     { data: plansData },
-    { data: rsvpData },
+    { data: subsData },
+    { data: attData },
   ] = await Promise.all([
-    supabase.from("sessions").select("*").eq("id", id).maybeSingle(),
-    supabase.from("members").select("*").eq("status", "active").order("name"),
+    supabase
+      .from("member_groups")
+      .select("members(*)")
+      .eq("group_id", session.group_id)
+      .eq("status", "active"),
     supabase
       .from("plans")
       .select("*")
+      .eq("group_id", session.group_id)
       .eq("active", true)
       .order("sort")
       .order("sessions_per_week"),
-    supabase.from("rsvps").select("member_id, coming").eq("session_id", id),
-  ]);
-  if (!sessionRow) notFound();
-  const session = sessionRow as Session;
-
-  // Round 2: that month's plans and that week's visits, all at once.
-  const ws = weekStart(session.session_date);
-  const [{ data: subsData }, { data: attData }] = await Promise.all([
     supabase
       .from("subscriptions")
       .select("*")
+      .eq("group_id", session.group_id)
       .eq("month", monthStart(session.session_date))
       .in("status", ["pending", "confirmed"]),
     supabase
       .from("attendance")
-      .select("*, sessions!inner(session_date)")
+      .select("*, sessions!inner(session_date, group_id)")
+      .eq("sessions.group_id", session.group_id)
       .gte("sessions.session_date", ws)
       .lte("sessions.session_date", addDays(ws, 6)),
   ]);
 
-  const members = (membersData ?? []) as Member[];
+  const members = (
+    (membersData ?? []) as unknown as { members: Member | null }[]
+  )
+    .map((r) => r.members)
+    .filter((m): m is Member => !!m && m.status === "active")
+    .sort((a, b) => a.name.localeCompare(b.name));
   const plans = (plansData ?? []) as Plan[];
   const subByMember = new Map(
     ((subsData ?? []) as Subscription[]).map((s) => [s.member_id, s]),
@@ -209,6 +242,27 @@ export default async function RegisterPage({
     (m) => !term || m.name.toLowerCase().includes(term),
   );
 
+  // Anyone at all marked here for this session (moving it is then not allowed).
+  const anyoneHere = ((attData ?? []) as Attendance[]).some(
+    (a) => a.session_id === id,
+  );
+
+  // Ready-made WhatsApp messages after moving or cancelling this session.
+  const timeLabel = `${formatDay(session.session_date)} at ${formatTime(session.start_time)}`;
+  let changeMessage: string | null = null;
+  if (moved && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(moved)) {
+    const [oldDate, oldTime] = moved.split("T");
+    changeMessage =
+      `Change of plan${groups.length > 1 ? ` for ${groupNameOf}` : ""}: ` +
+      `the ${formatDay(oldDate)} ${formatTime(oldTime)} session is moving to ${timeLabel}.\n\n` +
+      `If you're coming, please tap "I'm coming" again in your app. Thank you!`;
+  } else if (justCancelled && session.cancelled) {
+    changeMessage =
+      `Sorry ladies, there's no session on ${timeLabel}` +
+      `${session.cancel_reason ? ` (${session.cancel_reason})` : ""}.\n\n` +
+      `Your plan is weekly, so you're welcome to come to another session this week instead. See you soon!`;
+  }
+
   const hereCount = members.filter((m) =>
     (attByMember.get(m.id) ?? []).some((a) => a.session_id === id),
   ).length;
@@ -225,7 +279,7 @@ export default async function RegisterPage({
       </Link>
       <PageHead
         title="Register"
-        sub={`${formatDay(session.session_date)}, ${formatTime(session.start_time)}`}
+        sub={`${session.title}, ${formatDay(session.session_date)}, ${formatTime(session.start_time)}${groups.length > 1 ? ` · ${groupNameOf}` : ""}`}
       >
         <div className="cluster" style={{ marginTop: 12 }}>
           <span className="chip chip-solid">{hereCount} here</span>
@@ -240,6 +294,55 @@ export default async function RegisterPage({
           ) : null}
         </div>
       </PageHead>
+
+      {error ? (
+        <div className="note warn" role="alert" style={{ marginBottom: 14 }}>
+          {error}
+        </div>
+      ) : null}
+
+      {changeMessage ? (
+        <div className="card stack" style={{ marginBottom: 14 }}>
+          <div className="small" style={{ fontWeight: 700 }}>
+            Let the ladies know
+          </div>
+          <div
+            className="card"
+            style={{ background: "var(--sand)", whiteSpace: "pre-line", fontSize: 14 }}
+          >
+            {changeMessage}
+          </div>
+          <ShareToWhatsApp text={changeMessage}>
+            <Icon name="send" size={18} /> Share to WhatsApp
+          </ShareToWhatsApp>
+        </div>
+      ) : null}
+
+      {session.cancelled ? (
+        <div className="note warn" style={{ marginBottom: 14 }}>
+          <Icon name="x" />
+          <span>
+            This session is cancelled
+            {session.cancel_reason ? ` (${session.cancel_reason})` : ""}, so no
+            one can be marked here.
+          </span>
+        </div>
+      ) : isFuture ? (
+        <div className="note" style={{ marginBottom: 14 }}>
+          <Icon name="clock" />
+          <span>
+            This session hasn&apos;t happened yet. You can take the register on
+            the day.
+          </span>
+        </div>
+      ) : isPast ? (
+        <div className="note" style={{ marginBottom: 14 }}>
+          <Icon name="clock" />
+          <span>
+            This session has finished. Any change here corrects its register.
+          </span>
+        </div>
+      ) : null}
 
       <form method="get" role="search" style={{ marginBottom: 14 }}>
         <input
@@ -293,6 +396,7 @@ export default async function RegisterPage({
                     <Hidden name="memberId" value={m.id} />
                     <SubmitButton
                       className={here ? "btn btn-primary" : "btn btn-outline"}
+                      disabled={locked && !here}
                       aria-pressed={!!here}
                       aria-label={
                         here
@@ -345,7 +449,7 @@ export default async function RegisterPage({
       )}
 
       <div className="stack" style={{ marginTop: 20 }}>
-        <details className="details">
+        <details className="details" hidden={locked}>
           <summary>
             <Icon name="plus" /> Add a walk-in
           </summary>
@@ -373,29 +477,95 @@ export default async function RegisterPage({
           </form>
         </details>
 
-        <form action={setCancelled}>
-          <Hidden name="sessionId" value={id} />
-          <Hidden
-            name="cancelled"
-            value={session.cancelled ? "false" : "true"}
-          />
-          {session.cancelled ? (
+        {!session.cancelled && !isPast && !anyoneHere ? (
+          <details className="details">
+            <summary>
+              <Icon name="clock" /> Move or rename this session
+            </summary>
+            <form action={moveSession} className="stack">
+              <Hidden name="sessionId" value={id} />
+              <div className="form-row">
+                <div className="field">
+                  <label htmlFor="move-date">Date</label>
+                  <input
+                    id="move-date"
+                    name="date"
+                    type="date"
+                    min={today}
+                    defaultValue={session.session_date}
+                    required
+                  />
+                </div>
+                <div className="field">
+                  <label htmlFor="move-time">Time</label>
+                  <input
+                    id="move-time"
+                    name="time"
+                    type="time"
+                    defaultValue={session.start_time.slice(0, 5)}
+                    required
+                  />
+                </div>
+              </div>
+              <div className="field">
+                <label htmlFor="move-title">Name</label>
+                <input id="move-title" name="title" defaultValue={session.title} />
+              </div>
+              <p className="small muted">
+                Only this one session changes. If the date or time changes, the
+                ladies&apos; &ldquo;I&apos;m coming&rdquo; answers are cleared and
+                you&apos;ll get a message to send to the group.
+              </p>
+              <SubmitButton
+                className="btn btn-primary btn-block"
+                pendingText="Saving…"
+              >
+                Save change
+              </SubmitButton>
+            </form>
+          </details>
+        ) : null}
+
+        {session.cancelled ? (
+          <form action={restoreSession}>
+            <Hidden name="sessionId" value={id} />
             <SubmitButton
               className="btn btn-quiet btn-block"
               pendingText="Saving…"
             >
               Bring this session back
             </SubmitButton>
-          ) : (
-            <ConfirmSubmit
-              className="btn btn-quiet btn-block"
-              pendingText="Saving…"
-              confirm={`Cancel the ${formatTime(session.start_time)} session on ${formatDay(session.session_date)}? It will disappear from the ladies' page. Remember to tell them on WhatsApp.`}
-            >
-              Cancel this session
-            </ConfirmSubmit>
-          )}
-        </form>
+          </form>
+        ) : !isPast ? (
+          <details className="details">
+            <summary>
+              <Icon name="x" /> Cancel this session
+            </summary>
+            <form action={cancelSession} className="stack">
+              <Hidden name="sessionId" value={id} />
+              <div className="field">
+                <label htmlFor="cancel-reason">Reason (optional)</label>
+                <input
+                  id="cancel-reason"
+                  name="reason"
+                  maxLength={120}
+                  placeholder="e.g. hall not available"
+                />
+              </div>
+              <p className="small muted">
+                The ladies will see it as cancelled, with the reason. You&apos;ll
+                get a message to send to the group.
+              </p>
+              <ConfirmSubmit
+                className="btn btn-danger btn-block"
+                pendingText="Cancelling…"
+                confirm={`Cancel the ${formatTime(session.start_time)} session on ${formatDay(session.session_date)}?`}
+              >
+                Cancel this session
+              </ConfirmSubmit>
+            </form>
+          </details>
+        ) : null}
       </div>
     </>
   );

@@ -14,7 +14,10 @@ export async function siteOrigin(): Promise<string> {
   return `${proto}://${host}`;
 }
 
-export function joinLink(origin: string): string {
+/** The link a lady taps to ask to join one group. */
+export function joinLink(origin: string, groupId: string): string {
+  const params = new URLSearchParams({ g: groupId });
   const code = process.env.JOIN_CODE;
-  return code ? `${origin}/join?code=${encodeURIComponent(code)}` : `${origin}/join`;
+  if (code) params.set("code", code);
+  return `${origin}/join?${params.toString()}`;
 }

@@ -8,6 +8,7 @@ import { Icon } from "@/components/Icon";
 import { PageHead } from "@/components/PageHead";
 import { SubmitButton } from "@/components/SubmitButton";
 import { ConfirmSubmit } from "@/components/ConfirmSubmit";
+import { requireGroup } from "@/lib/groups";
 import type { Member, Plan } from "@/lib/types";
 import { PaymentForm } from "./PaymentForm";
 
@@ -23,22 +24,25 @@ export default async function PaymentsPage({
   const month = m && /^\d{4}-\d{2}-01$/.test(m) ? m : thisMonth;
 
   const supabase = await createClient();
+  const group = await requireGroup();
   const [{ data: subsData }, { data: membersData }, { data: plansData }] =
     await Promise.all([
       supabase
         .from("subscriptions")
         .select("*, members(name)")
+        .eq("group_id", group.id)
         .eq("month", month)
         .in("status", ["pending", "confirmed"])
         .order("created_at", { ascending: false }),
       supabase
-        .from("members")
-        .select("id, name")
-        .eq("status", "active")
-        .order("name"),
+        .from("member_groups")
+        .select("members(id, name, status)")
+        .eq("group_id", group.id)
+        .eq("status", "active"),
       supabase
         .from("plans")
         .select("*")
+        .eq("group_id", group.id)
         .eq("active", true)
         .order("sort")
         .order("sessions_per_week"),
@@ -54,7 +58,17 @@ export default async function PaymentsPage({
     members: { name: string } | null;
   }[];
   const plans = (plansData ?? []) as Plan[];
-  const members = (membersData ?? []) as Pick<Member, "id" | "name">[];
+  const members = (
+    (membersData ?? []) as unknown as {
+      members: Pick<Member, "id" | "name" | "status"> | null;
+    }[]
+  )
+    .map((r) => r.members)
+    .filter(
+      (m): m is Pick<Member, "id" | "name" | "status"> =>
+        !!m && m.status === "active",
+    )
+    .sort((a, b) => a.name.localeCompare(b.name));
   const total = subs
     .filter((s) => s.status === "confirmed")
     .reduce((sum, s) => sum + s.price_pence, 0);
@@ -97,7 +111,8 @@ export default async function PaymentsPage({
         <div className="body">
           {plans.length === 0 ? (
             <div className="note warn">
-              Add a plan in Settings first, then you can record payments.
+              Add a plan for {group.name} in Settings first, then you can
+              record payments.
             </div>
           ) : (
             <PaymentForm

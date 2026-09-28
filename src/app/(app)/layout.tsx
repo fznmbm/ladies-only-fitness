@@ -1,6 +1,8 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { Nav } from "@/components/Nav";
+import { GroupSwitcher } from "@/components/GroupSwitcher";
+import { getGroupContext } from "@/lib/groups";
 import { SubmitButton } from "@/components/SubmitButton";
 import { signOut } from "@/app/login/actions";
 
@@ -44,9 +46,27 @@ export default async function AppLayout({
     );
   }
 
+  const { active, group } = await getGroupContext();
+  if (!group) {
+    return (
+      <main className="login">
+        <h1 className="title">One more step</h1>
+        <p className="subtitle" style={{ marginTop: 10 }}>
+          The groups update hasn&apos;t been added to the database yet. Run
+          migration 009 in the Supabase SQL editor, then reload this page.
+        </p>
+      </main>
+    );
+  }
+
   return (
     <>
-      <div className="shell">{children}</div>
+      <div className="shell org">
+        <div className="org-top">
+          <GroupSwitcher groups={active} currentId={group.id} />
+        </div>
+        {children}
+      </div>
       <Nav />
     </>
   );

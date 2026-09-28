@@ -1,11 +1,16 @@
+import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { WEEKDAYS, formatTime } from "@/lib/dates";
 import {
+  addGroup,
   addPlan,
   addSlot,
   deleteSlot,
+  renameGroup,
   savePlan,
+  setGroupActive,
   setPlanActive,
+  updateSlot,
 } from "@/app/actions";
 import { signOut } from "@/app/login/actions";
 import { Icon } from "@/components/Icon";
@@ -14,18 +19,75 @@ import { SubmitButton } from "@/components/SubmitButton";
 import { ConfirmSubmit } from "@/components/ConfirmSubmit";
 import { InstallHint } from "@/components/InstallHint";
 import { ShareToWhatsApp } from "@/components/ShareToWhatsApp";
-import { groupName, joinLink, siteOrigin } from "@/lib/config";
+import { joinLink, siteOrigin } from "@/lib/config";
+import { getGroupContext, requireGroup } from "@/lib/groups";
 import type { Plan, Slot } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
 
-export default async function SettingsPage() {
+function DayTimeFields({ prefix, slot }: { prefix: string; slot?: Slot }) {
+  return (
+    <>
+      <div className="form-row">
+        <div className="field">
+          <label htmlFor={`${prefix}-weekday`}>Day</label>
+          <select
+            id={`${prefix}-weekday`}
+            name="weekday"
+            defaultValue={String(slot?.weekday ?? 1)}
+          >
+            {WEEKDAYS.map((d, i) => (
+              <option key={d} value={i + 1}>
+                {d}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div className="field">
+          <label htmlFor={`${prefix}-time`}>Time</label>
+          <input
+            id={`${prefix}-time`}
+            name="time"
+            type="time"
+            defaultValue={slot?.start_time.slice(0, 5)}
+            required
+          />
+        </div>
+      </div>
+      <div className="field">
+        <label htmlFor={`${prefix}-title`}>Name (optional)</label>
+        <input
+          id={`${prefix}-title`}
+          name="title"
+          defaultValue={slot?.title}
+          placeholder="Workout session"
+        />
+      </div>
+    </>
+  );
+}
+
+export default async function SettingsPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ timetable?: string; n?: string; error?: string }>;
+}) {
+  const { timetable, n, error } = await searchParams;
   const supabase = await createClient();
+  const group = await requireGroup();
+  const { groups } = await getGroupContext();
+
   const [{ data: plansData }, { data: slotsData }] = await Promise.all([
-    supabase.from("plans").select("*").order("sort").order("sessions_per_week"),
+    supabase
+      .from("plans")
+      .select("*")
+      .eq("group_id", group.id)
+      .order("sort")
+      .order("sessions_per_week"),
     supabase
       .from("schedule_slots")
       .select("*")
+      .eq("group_id", group.id)
       .order("weekday")
       .order("start_time"),
   ]);
@@ -33,22 +95,43 @@ export default async function SettingsPage() {
   const slots = (slotsData ?? []) as Slot[];
   const active = plans.filter((p) => p.active);
   const archived = plans.filter((p) => !p.active);
+  const liveGroups = groups.filter((g) => g.active);
+  const pausedGroups = groups.filter((g) => !g.active);
 
-  const invite = joinLink(await siteOrigin());
-  const inviteText = `Hi ladies! To join ${groupName()} online, tap this link and enter your name and WhatsApp number. I'll send you your own link once I've checked it: ${invite}`;
-  // const inviteWa = `https://wa.me/?text=${encodeURIComponent(inviteText)}`;
+  const invite = joinLink(await siteOrigin(), group.id);
+  const inviteText = `Hi ladies! To join ${group.name} online, tap this link and enter your name and WhatsApp number. I'll send you your own link once I've checked it: ${invite}`;
+
+  const changed = Number(n) || 0;
+  const timetableNote =
+    timetable === "added"
+      ? "Added. Its sessions for the next 3 weeks are ready."
+      : timetable === "changed"
+        ? changed > 0
+          ? `Saved. ${changed} upcoming ${changed === 1 ? "session was" : "sessions were"} updated to match.`
+          : "Saved."
+        : timetable === "removed"
+          ? changed > 0
+            ? `Removed, along with ${changed} upcoming ${changed === 1 ? "session" : "sessions"} nobody had been marked at.`
+            : "Removed."
+          : null;
 
   return (
     <>
-      <PageHead title="Settings" />
+      <PageHead title="Settings" sub={`For ${group.name}`} />
+
+      {error ? (
+        <div className="note warn" role="alert" style={{ marginBottom: 12 }}>
+          {error}
+        </div>
+      ) : null}
 
       <h2 className="section-title" style={{ marginTop: 0 }}>
-        Invite the ladies
+        Invite the ladies to {group.name}
       </h2>
       <div className="card stack">
         <p className="small muted">
-          Post this in the WhatsApp group. Each lady asks to join, and you
-          approve her under Members.
+          Post this in the group&apos;s WhatsApp chat. Each lady asks to join,
+          and you approve her under Members.
         </p>
         <p className="small" style={{ wordBreak: "break-all" }}>
           {invite}
@@ -61,12 +144,93 @@ export default async function SettingsPage() {
       <h2 className="section-title">This app on your phone</h2>
       <InstallHint />
 
-      <h2 className="section-title">Plans and prices</h2>
+      <h2 className="section-title">Weekly timetable</h2>
+      {timetableNote ? (
+        <div className="note" role="status" style={{ marginBottom: 12 }}>
+          <Icon name="check" />
+          <span>
+            {timetableNote}{" "}
+            <Link href="/share">Send the ladies the new times</Link>.
+          </span>
+        </div>
+      ) : null}
+      {slots.length === 0 ? (
+        <div className="note" style={{ marginBottom: 12 }}>
+          <Icon name="clock" />
+          <span>
+            Add each weekly session here. Sessions are then made automatically
+            for the next 3 weeks, and kept topped up every night.
+          </span>
+        </div>
+      ) : (
+        <ul className="list" style={{ marginBottom: 12 }}>
+          {slots.map((s) => (
+            <li key={s.id}>
+              <div className="row-main" style={{ minHeight: 60 }}>
+                <div className="grow">
+                  <div className="name">
+                    {WEEKDAYS[s.weekday - 1]}, {formatTime(s.start_time)}
+                  </div>
+                  <div className="sub">{s.title}</div>
+                </div>
+                <form action={deleteSlot}>
+                  <input type="hidden" name="id" value={s.id} />
+                  <ConfirmSubmit
+                    className="btn btn-quiet btn-small"
+                    aria-label={`Remove ${WEEKDAYS[s.weekday - 1]} ${formatTime(s.start_time)}`}
+                    confirm={`Remove ${WEEKDAYS[s.weekday - 1]} ${formatTime(s.start_time)} from the weekly timetable? Its upcoming sessions that nobody has been marked at are removed too.`}
+                  >
+                    <Icon name="x" size={18} />
+                  </ConfirmSubmit>
+                </form>
+              </div>
+              <details className="details" style={{ margin: "0 14px 14px" }}>
+                <summary>Change day, time or name</summary>
+                <form action={updateSlot}>
+                  <input type="hidden" name="id" value={s.id} />
+                  <DayTimeFields prefix={`slot-${s.id}`} slot={s} />
+                  <p className="small muted" style={{ marginBottom: 12 }}>
+                    Upcoming sessions nobody has been marked at yet move too.
+                    If the day or time changes, their &ldquo;I&apos;m
+                    coming&rdquo; answers are cleared. Sessions you moved by
+                    hand stay as they are.
+                  </p>
+                  <SubmitButton
+                    className="btn btn-primary btn-block"
+                    pendingText="Saving…"
+                  >
+                    Save change
+                  </SubmitButton>
+                </form>
+              </details>
+            </li>
+          ))}
+        </ul>
+      )}
+
+      <details className="details">
+        <summary>
+          <Icon name="plus" /> Add a weekly session
+        </summary>
+        <form action={addSlot}>
+          <DayTimeFields prefix="new-slot" />
+          <SubmitButton
+            className="btn btn-primary btn-block"
+            pendingText="Adding…"
+          >
+            Add to timetable
+          </SubmitButton>
+        </form>
+      </details>
+
+      <h2 className="section-title" style={{ marginTop: 32 }}>
+        Plans and prices
+      </h2>
       <div className="note" style={{ marginBottom: 12 }}>
         <Icon name="clock" />
         <span>
-          Plans run for the calendar month. New prices only apply to payments
-          recorded from now on.
+          Plans run for the calendar month and only count {group.name}{" "}
+          sessions. New prices only apply to payments recorded from now on.
         </span>
       </div>
 
@@ -199,74 +363,109 @@ export default async function SettingsPage() {
       </div>
 
       <h2 className="section-title" style={{ marginTop: 32 }}>
-        Weekly timetable
+        Groups
       </h2>
-      {slots.length === 0 ? (
-        <div className="note" style={{ marginBottom: 12 }}>
-          <Icon name="clock" />
-          <span>
-            Add each weekly session here, then create sessions from the Sessions
-            screen.
-          </span>
-        </div>
-      ) : (
-        <ul className="list" style={{ marginBottom: 12 }}>
-          {slots.map((s) => (
-            <li key={s.id} className="row-main" style={{ minHeight: 60 }}>
-              <div className="grow">
-                <div className="name">
-                  {WEEKDAYS[s.weekday - 1]}, {formatTime(s.start_time)}
-                </div>
-                <div className="sub">{s.title}</div>
-              </div>
-              <form action={deleteSlot}>
-                <input type="hidden" name="id" value={s.id} />
+      <div className="note" style={{ marginBottom: 12 }}>
+        <Icon name="users" />
+        <span>
+          Each group has its own timetable, plans, members and payments. Switch
+          between them with the menu at the top of the screen.
+        </span>
+      </div>
+      <ul className="list" style={{ marginBottom: 12 }}>
+        {liveGroups.map((g) => (
+          <li key={g.id}>
+            <form
+              action={renameGroup}
+              className="row-main"
+              style={{ gap: 8, minHeight: 64 }}
+            >
+              <input type="hidden" name="id" value={g.id} />
+              <label htmlFor={`group-${g.id}`} className="sr-only">
+                Group name
+              </label>
+              <input
+                id={`group-${g.id}`}
+                name="name"
+                defaultValue={g.name}
+                required
+                maxLength={60}
+                style={{ flex: 1 }}
+              />
+              <SubmitButton
+                className="btn btn-outline btn-small"
+                pendingText="…"
+              >
+                Save
+              </SubmitButton>
+            </form>
+            {liveGroups.length > 1 ? (
+              <form action={setGroupActive} style={{ padding: "0 14px 12px" }}>
+                <input type="hidden" name="id" value={g.id} />
+                <input type="hidden" name="active" value="false" />
                 <ConfirmSubmit
                   className="btn btn-quiet btn-small"
-                  aria-label={`Remove ${WEEKDAYS[s.weekday - 1]} ${formatTime(s.start_time)}`}
-                  confirm={`Remove ${WEEKDAYS[s.weekday - 1]} ${formatTime(s.start_time)} from the weekly timetable? Sessions already created stay as they are.`}
+                  confirm={`Stop running ${g.name}? It's hidden and no new sessions are made. Its history is kept, and you can bring it back any time.`}
                 >
-                  <Icon name="x" size={18} />
+                  Stop running this group
                 </ConfirmSubmit>
               </form>
-            </li>
-          ))}
-        </ul>
-      )}
-
+            ) : null}
+          </li>
+        ))}
+      </ul>
       <details className="details">
         <summary>
-          <Icon name="plus" /> Add a weekly session
+          <Icon name="plus" /> Start a new group
         </summary>
-        <form action={addSlot}>
-          <div className="form-row">
-            <div className="field">
-              <label htmlFor="weekday">Day</label>
-              <select id="weekday" name="weekday" defaultValue="1">
-                {WEEKDAYS.map((d, i) => (
-                  <option key={d} value={i + 1}>
-                    {d}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div className="field">
-              <label htmlFor="slot-time">Time</label>
-              <input id="slot-time" name="time" type="time" required />
-            </div>
-          </div>
+        <form action={addGroup}>
           <div className="field">
-            <label htmlFor="slot-title">Name (optional)</label>
-            <input id="slot-title" name="title" placeholder="Workout session" />
+            <label htmlFor="new-group">Name</label>
+            <input
+              id="new-group"
+              name="name"
+              required
+              maxLength={60}
+              placeholder="e.g. Tuesday Morning Ladies"
+            />
           </div>
+          <p className="small muted" style={{ marginBottom: 12 }}>
+            You&apos;ll switch to it straight away, to add its timetable and
+            plans.
+          </p>
           <SubmitButton
             className="btn btn-primary btn-block"
             pendingText="Adding…"
           >
-            Add to timetable
+            Start group
           </SubmitButton>
         </form>
       </details>
+      {pausedGroups.length > 0 ? (
+        <details className="details" style={{ marginTop: 12 }}>
+          <summary>Groups not running</summary>
+          <div className="body">
+            {pausedGroups.map((g) => (
+              <form
+                key={g.id}
+                action={setGroupActive}
+                className="cluster"
+                style={{ justifyContent: "space-between" }}
+              >
+                <input type="hidden" name="id" value={g.id} />
+                <input type="hidden" name="active" value="true" />
+                <span>{g.name}</span>
+                <SubmitButton
+                  className="btn btn-outline btn-small"
+                  pendingText="Saving…"
+                >
+                  Run again
+                </SubmitButton>
+              </form>
+            ))}
+          </div>
+        </details>
+      ) : null}
 
       <form action={signOut} style={{ marginTop: 32 }}>
         <SubmitButton

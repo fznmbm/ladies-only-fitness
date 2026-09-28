@@ -1,5 +1,19 @@
+export type Group = {
+  id: string;
+  name: string;
+  sort: number;
+  active: boolean;
+};
+
+export type MemberGroup = {
+  member_id: string;
+  group_id: string;
+  status: "pending" | "active";
+};
+
 export type Plan = {
   id: string;
+  group_id: string;
   name: string;
   sessions_per_week: number;
   price_pence: number;
@@ -19,6 +33,7 @@ export type Member = {
 export type Subscription = {
   id: string;
   member_id: string;
+  group_id: string;
   plan_id: string;
   month: string;
   sessions_per_week: number;
@@ -32,10 +47,14 @@ export type Subscription = {
 
 export type Session = {
   id: string;
+  group_id: string;
   session_date: string;
   start_time: string;
   title: string;
   cancelled: boolean;
+  cancel_reason: string | null;
+  slot_id: string | null;
+  slot_date: string | null;
 };
 
 export type Attendance = {
@@ -50,6 +69,7 @@ export type Attendance = {
 
 export type Slot = {
   id: string;
+  group_id: string;
   weekday: number;
   start_time: string;
   title: string;

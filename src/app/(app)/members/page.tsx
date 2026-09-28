@@ -17,6 +17,7 @@ import { PageHead } from "@/components/PageHead";
 import { JoinRequests } from "@/components/LoginLink";
 import { AutoRefresh } from "@/components/AutoRefresh";
 import { ShareToWhatsApp } from "@/components/ShareToWhatsApp";
+import { requireGroup } from "@/lib/groups";
 import type { Member, Subscription } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
@@ -37,37 +38,57 @@ export default async function MembersPage({
   const q = (params.q ?? "").trim();
 
   const supabase = await createClient();
+  const group = await requireGroup();
   const today = todayISO();
   const month = monthStart(today);
   const nextMonth = addMonths(month, 1);
 
+  // Everything for the group being viewed, all at once.
   const [membersRes, subsRes, pastRes, activityRes, pendingRes] =
     await Promise.all([
-      supabase.from("members").select("*").eq("status", "active").order("name"),
+      supabase
+        .from("member_groups")
+        .select("members(*)")
+        .eq("group_id", group.id)
+        .eq("status", "active"),
       supabase
         .from("subscriptions")
         .select("*")
+        .eq("group_id", group.id)
         .in("month", [month, nextMonth])
         .in("status", ["pending", "confirmed"]),
       supabase
         .from("sessions")
         .select("id")
+        .eq("group_id", group.id)
         .lte("session_date", today)
         .eq("cancelled", false)
         .order("session_date", { ascending: false })
         .order("start_time", { ascending: false })
         .limit(3),
-      // One line per lady, worked out in the database (migration 005).
-      supabase.rpc("member_activity", { p_today: today }),
+      // One line per lady, worked out in the database (migration 009).
+      supabase.rpc("member_activity", { p_group_id: group.id, p_today: today }),
       supabase
-        .from("members")
-        .select("*")
+        .from("member_groups")
+        .select("created_at, members(id, name, phone, status)")
+        .eq("group_id", group.id)
         .eq("status", "pending")
         .order("created_at"),
     ]);
-  const pending = (pendingRes.data ?? []) as Member[];
+  const pending = (
+    (pendingRes.data ?? []) as unknown as {
+      members: Pick<Member, "id" | "name" | "phone" | "status"> | null;
+    }[]
+  )
+    .map((r) => r.members)
+    .filter((m): m is Pick<Member, "id" | "name" | "phone" | "status"> => !!m);
 
-  const members = (membersRes.data ?? []) as Member[];
+  const members = (
+    (membersRes.data ?? []) as unknown as { members: Member | null }[]
+  )
+    .map((r) => r.members)
+    .filter((m): m is Member => !!m && m.status === "active")
+    .sort((a, b) => a.name.localeCompare(b.name));
   const subs = (subsRes.data ?? []) as Subscription[];
   const pastIds = new Set(
     ((pastRes.data ?? []) as { id: string }[]).map((s) => s.id),
@@ -123,18 +144,21 @@ export default async function MembersPage({
   function messageFor(m: Member): string {
     const first = m.name.split(" ")[0];
     if (filter === "notseen")
-      return `Hi ${first}, we've missed you at the last few sessions. Hope all is well and we'll see you soon!`;
+      return `Hi ${first}, we've missed you at the last few ${group.name} sessions. Hope all is well and we'll see you soon!`;
     if (filter === "notpaid")
-      return `Hi ${first}, a friendly reminder that your plan for ${monthName(month)} hasn't been paid yet. You can pay by bank transfer or cash at the next session. Thank you!`;
+      return `Hi ${first}, a friendly reminder that your ${group.name} plan for ${monthName(month)} hasn't been paid yet. You can pay by bank transfer or cash at the next session. Thank you!`;
     if (filter === "owes")
-      return `Hi ${first}, a friendly reminder about the session you attended and haven't paid for yet. You can pay by bank transfer or cash at the next session. Thank you!`;
+      return `Hi ${first}, a friendly reminder about the ${group.name} session you attended and haven't paid for yet. You can pay by bank transfer or cash at the next session. Thank you!`;
     return `Hi ${first}, `;
   }
 
   return (
     <>
       <AutoRefresh seconds={20} />
-      <PageHead title="Members" sub={`${members.length} in the group`} />
+      <PageHead
+        title="Members"
+        sub={`${members.length} in ${group.name}`}
+      />
 
       {params.error ? (
         <div className="note warn" role="alert" style={{ marginBottom: 12 }}>
@@ -149,6 +173,8 @@ export default async function MembersPage({
           id: r.id,
           name: r.name,
           phone: r.phone,
+          groupId: group.id,
+          existing: r.status === "active",
         }))}
       />
 

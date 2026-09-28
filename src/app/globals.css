@@ -60,6 +60,41 @@ a {
   color: var(--muted);
   margin-bottom: 4px;
 }
+
+/* Organiser screens: the group name (or group menu) sits above every page title. */
+.org-top {
+  padding-top: 18px;
+}
+.org-top .group-name {
+  margin: 0;
+}
+.org .page-head {
+  padding-top: 6px;
+}
+.org .page-head > .group-name {
+  display: none;
+}
+.group-switch select {
+  width: auto;
+  max-width: 100%;
+  min-height: 36px;
+  padding: 6px 32px 6px 12px;
+  border: 0;
+  border-radius: 999px;
+  background-color: var(--sand);
+  color: var(--plum);
+  font: inherit;
+  font-size: 14px;
+  font-weight: 700;
+}
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
 .title {
   font-family: var(--font-display), Georgia, serif;
   font-weight: 600;
