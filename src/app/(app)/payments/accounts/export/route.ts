@@ -1,5 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import { requireGroup } from "@/lib/groups";
+import { getStaff } from "@/lib/staff";
 import { addMonths, formatMonth } from "@/lib/dates";
 import { EXPENSE_CATEGORIES, type Expense } from "@/lib/types";
 
@@ -40,6 +41,8 @@ export async function GET(request: Request) {
   const supabase = await createClient();
   const { data: claims } = await supabase.auth.getClaims();
   if (!claims?.claims) return new Response("Please sign in", { status: 401 });
+  if ((await getStaff())?.role !== "organiser")
+    return new Response("Only the organiser can download the accounts", { status: 403 });
 
   const group = await requireGroup();
   const all = url.searchParams.get("scope") === "all";

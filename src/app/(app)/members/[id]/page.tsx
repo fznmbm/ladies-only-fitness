@@ -5,6 +5,7 @@ import { formatDate, formatTime, monthName } from "@/lib/dates";
 import { pounds } from "@/lib/money";
 import { deleteMember, setMemberGroup, updateMember } from "@/app/actions";
 import { getGroupContext } from "@/lib/groups";
+import { getStaff } from "@/lib/staff";
 import { Icon } from "@/components/Icon";
 import { PageHead } from "@/components/PageHead";
 import { SubmitButton } from "@/components/SubmitButton";
@@ -58,6 +59,8 @@ export default async function MemberPage({
     ]);
   if (!memberRow) notFound();
   const member = memberRow as Member;
+  // Helpers can look up a lady at the door; only the organiser changes her details.
+  const isOrganiser = (await getStaff())?.role === "organiser";
 
   const subs = (subsData ?? []) as (Subscription & {
     groups: { name: string } | null;
@@ -108,6 +111,12 @@ export default async function MemberPage({
         </div>
       ) : null}
 
+      {!isOrganiser ? (
+        <div className="card stack">
+          <div className="small muted">WhatsApp number</div>
+          <div className="name">{member.phone ?? "Not given"}</div>
+        </div>
+      ) : (
       <form action={updateMember} className="card stack">
         <input type="hidden" name="id" value={member.id} />
         <div className="field">
@@ -142,8 +151,9 @@ export default async function MemberPage({
           Save changes
         </SubmitButton>
       </form>
+      )}
 
-      {member.status === "active" ? (
+      {isOrganiser && member.status === "active" ? (
         <>
           <h2 className="section-title">Her personal link</h2>
           <div className="card stack">
@@ -177,6 +187,7 @@ export default async function MemberPage({
                       : "Not in this group"}
                 </div>
               </div>
+              {isOrganiser ? (
               <form action={setMemberGroup}>
                 <input type="hidden" name="memberId" value={member.id} />
                 <input type="hidden" name="groupId" value={g.id} />
@@ -196,6 +207,7 @@ export default async function MemberPage({
                   {status === "active" ? "Remove" : "Add"}
                 </SubmitButton>
               </form>
+              ) : null}
             </li>
           );
         })}
@@ -261,6 +273,7 @@ export default async function MemberPage({
         </ul>
       )}
 
+      {isOrganiser ? (
       <details className="details" style={{ marginTop: 28 }}>
         <summary>Delete this member</summary>
         <form action={deleteMember} className="stack">
@@ -286,6 +299,7 @@ export default async function MemberPage({
           </SubmitButton>
         </form>
       </details>
+      ) : null}
     </>
   );
 }

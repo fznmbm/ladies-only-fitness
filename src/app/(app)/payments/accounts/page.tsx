@@ -1,4 +1,6 @@
 import Link from "next/link";
+import { redirect } from "next/navigation";
+import { getStaff } from "@/lib/staff";
 import { createClient } from "@/lib/supabase/server";
 import {
   addMonths,
@@ -46,6 +48,9 @@ export default async function AccountsPage({
   searchParams: Promise<{ month?: string; scope?: string }>;
 }) {
   const { month: m, scope } = await searchParams;
+  // Money and settings are for the organiser only.
+  if ((await getStaff())?.role !== "organiser") redirect("/sessions");
+
   const today = todayISO();
   const thisMonth = monthStart(today);
   const month = m && /^\d{4}-\d{2}-01$/.test(m) ? m : thisMonth;

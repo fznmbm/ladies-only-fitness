@@ -678,6 +678,11 @@ input[type="checkbox"] {
   overflow: hidden;
 }
 
+/* Anything marked hidden stays hidden, whatever layout class it has. */
+[hidden] {
+  display: none !important;
+}
+
 /* ---------- Accounts ---------- */
 .money-tiles {
   display: grid;

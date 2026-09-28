@@ -4,8 +4,17 @@ import { revalidatePath } from "next/cache";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { createClient, type Db } from "@/lib/supabase/server";
-import { addMonths, monthStart, todayISO } from "@/lib/dates";
-import { toPence } from "@/lib/money";
+import { createAdminClient } from "@/lib/supabase/admin";
+import {
+  WEEKDAYS,
+  addMonths,
+  formatDate,
+  formatTime,
+  monthName,
+  monthStart,
+  todayISO,
+} from "@/lib/dates";
+import { pounds, toPence } from "@/lib/money";
 import { groupName, siteOrigin } from "@/lib/config";
 import { hashToken, newToken } from "@/lib/memberAuth";
 import { normalizePhone, whatsappUrl } from "@/lib/phone";
@@ -16,7 +25,18 @@ import {
 } from "@/lib/b2";
 import { ensureSessions } from "@/lib/sessions";
 import { GROUP_COOKIE, requireGroup } from "@/lib/groups";
+import { getStaff, requireOrganiser } from "@/lib/staff";
+import { logActivity } from "@/lib/activity";
 import { EXPENSE_CATEGORIES, type Plan } from "@/lib/types";
+
+/** "Zumba, Wed 1 Oct 7:00 pm", for the activity record. */
+function describeSession(s: { title: string; session_date: string; start_time: string }) {
+  return `${s.title}, ${formatDate(s.session_date)} ${formatTime(s.start_time)}`;
+}
+
+async function isOrganiser(): Promise<boolean> {
+  return (await getStaff())?.role === "organiser";
+}
 
 function refresh() {
   revalidatePath("/", "layout");
@@ -88,6 +108,7 @@ export async function setCurrentGroup(formData: FormData) {
 }
 
 export async function addGroup(formData: FormData) {
+  await requireOrganiser();
   const supabase = await createClient();
   const name = str(formData, "name");
   if (!name) return;
@@ -110,6 +131,7 @@ export async function addGroup(formData: FormData) {
 }
 
 export async function renameGroup(formData: FormData) {
+  await requireOrganiser();
   const supabase = await createClient();
   const name = str(formData, "name");
   if (!name) return;
@@ -122,6 +144,7 @@ export async function renameGroup(formData: FormData) {
 }
 
 export async function setGroupActive(formData: FormData) {
+  await requireOrganiser();
   const supabase = await createClient();
   const active = str(formData, "active") === "true";
   if (!active) {
@@ -148,12 +171,14 @@ export async function setGroupActive(formData: FormData) {
 
 /** The "Add sessions from the weekly timetable" button. A nightly job does the same. */
 export async function generateSessions() {
+  await requireOrganiser();
   const supabase = await createClient();
   await ensureSessions(supabase);
   refresh();
 }
 
 export async function addSession(formData: FormData) {
+  await requireOrganiser();
   const supabase = await createClient();
   const group = await requireGroup();
   const date = str(formData, "date");
@@ -176,6 +201,7 @@ export async function addSession(formData: FormData) {
  * won't put the original back.
  */
 export async function moveSession(formData: FormData) {
+  await requireOrganiser();
   const supabase = await createClient();
   const id = str(formData, "sessionId");
   const date = str(formData, "date");
@@ -220,6 +246,13 @@ export async function moveSession(formData: FormData) {
     const { error: e2 } = await supabase.from("rsvps").delete().eq("session_id", id);
     check(e2);
   }
+  await logActivity(
+    supabase,
+    moved ? "Moved session" : "Renamed session",
+    moved
+      ? `${title}: ${formatDate(oldDate)} ${formatTime(oldTime)} to ${formatDate(date)} ${formatTime(time)}`
+      : title,
+  );
   refresh();
   redirect(
     moved
@@ -230,26 +263,41 @@ export async function moveSession(formData: FormData) {
 
 /** Cancels one session, with an optional reason the ladies will see. */
 export async function cancelSession(formData: FormData) {
+  await requireOrganiser();
   const supabase = await createClient();
   const id = str(formData, "sessionId");
   const reason = str(formData, "reason").slice(0, 120) || null;
-  const { error } = await supabase
+  const { data: cancelled, error } = await supabase
     .from("sessions")
     .update({ cancelled: true, cancel_reason: reason })
-    .eq("id", id);
+    .eq("id", id)
+    .select("title, session_date, start_time, group_id")
+    .maybeSingle();
   check(error);
+  if (cancelled)
+    await logActivity(
+      supabase,
+      "Cancelled session",
+      describeSession(cancelled) + (reason ? ` (${reason})` : ""),
+      cancelled.group_id,
+    );
   refresh();
   redirect(`/sessions/${id}?cancelled=1`);
 }
 
 /** Brings a cancelled session back. */
 export async function restoreSession(formData: FormData) {
+  await requireOrganiser();
   const supabase = await createClient();
   const id = str(formData, "sessionId");
-  const { error } = await supabase
+  const { data: restored, error } = await supabase
     .from("sessions")
     .update({ cancelled: false, cancel_reason: null })
-    .eq("id", id);
+    .eq("id", id)
+    .select("title, session_date, start_time, group_id")
+    .maybeSingle();
+  if (restored)
+    await logActivity(supabase, "Brought session back", describeSession(restored), restored.group_id);
   if (error)
     redirect(
       `/sessions/${id}?error=` +
@@ -365,6 +413,13 @@ export async function cashPlan(formData: FormData) {
     .eq("id", attendanceId);
   check(e2);
   await settlePayLater(supabase, memberId, session.group_id, month);
+  const { data: m } = await supabase.from("members").select("name").eq("id", memberId).maybeSingle();
+  await logActivity(
+    supabase,
+    "Cash for a plan at the door",
+    `${m?.name ?? "someone"}, ${p.name} ${pounds(p.price_pence)} for ${monthName(month)}`,
+    session.group_id,
+  );
   refresh();
 }
 
@@ -447,6 +502,7 @@ export async function addWalkIn(formData: FormData) {
 
 /** Adds a lady to the group being viewed. */
 export async function addMember(formData: FormData) {
+  await requireOrganiser();
   const supabase = await createClient();
   const group = await requireGroup();
   const name = str(formData, "name");
@@ -462,6 +518,7 @@ export async function addMember(formData: FormData) {
 }
 
 export async function updateMember(formData: FormData) {
+  await requireOrganiser();
   const supabase = await createClient();
   const id = str(formData, "id");
   const { error } = await supabase
@@ -480,6 +537,7 @@ export async function updateMember(formData: FormData) {
 
 /** On a member's page: add her to a group, or take her out of one. */
 export async function setMemberGroup(formData: FormData) {
+  await requireOrganiser();
   const supabase = await createClient();
   const memberId = str(formData, "memberId");
   const groupId = str(formData, "groupId");
@@ -503,6 +561,7 @@ export async function setMemberGroup(formData: FormData) {
  * because it keeps her payment history.
  */
 export async function deleteMember(formData: FormData) {
+  await requireOrganiser();
   const supabase = await createClient();
   const id = str(formData, "id");
   if (!id || str(formData, "confirm") !== "yes")
@@ -515,7 +574,7 @@ export async function deleteMember(formData: FormData) {
     .from("members")
     .delete()
     .eq("id", id)
-    .select("id");
+    .select("id, name");
   if (error)
     redirect(`/members/${id}?error=` + encodeURIComponent(error.message));
   if (!deleted || deleted.length === 0)
@@ -531,6 +590,7 @@ export async function deleteMember(formData: FormData) {
   } catch (e) {
     console.error("Couldn't remove receipts for deleted member", id, e);
   }
+  await logActivity(supabase, "Deleted member", String(deleted[0].name ?? ""));
 
   refresh();
   redirect("/members");
@@ -539,6 +599,7 @@ export async function deleteMember(formData: FormData) {
 // ---------- Payments ----------
 
 export async function recordPayment(formData: FormData) {
+  await requireOrganiser();
   const supabase = await createClient();
   const memberId = str(formData, "memberId");
   const month = str(formData, "month");
@@ -574,27 +635,51 @@ export async function recordPayment(formData: FormData) {
     redirect("/payments?error=" + encodeURIComponent(msg));
   }
   await settlePayLater(supabase, memberId, p.group_id, month);
+  const { data: m } = await supabase.from("members").select("name").eq("id", memberId).maybeSingle();
+  await logActivity(
+    supabase,
+    "Recorded payment",
+    `${m?.name ?? "someone"}, ${pounds(toPence(str(formData, "amount")))} ${method} for ${monthName(month)}`,
+    p.group_id,
+  );
   refresh();
   redirect("/payments?month=" + month);
 }
 
 export async function voidPayment(formData: FormData) {
+  await requireOrganiser();
   const supabase = await createClient();
+  const id = str(formData, "id");
+  const { data: before } = await supabase
+    .from("subscriptions")
+    .select("status, group_id, month, price_pence, members(name)")
+    .eq("id", id)
+    .maybeSingle();
   const { error } = await supabase
     .from("subscriptions")
     .update({ status: "rejected" })
-    .eq("id", str(formData, "id"));
+    .eq("id", id);
   check(error);
+  if (before) {
+    const who = (before.members as unknown as { name: string } | null)?.name ?? "someone";
+    await logActivity(
+      supabase,
+      before.status === "pending" ? "Payment not received" : "Removed payment",
+      `${who}, ${pounds(before.price_pence)} for ${monthName(before.month)}`,
+      before.group_id,
+    );
+  }
   refresh();
 }
 
 /** She uploaded a receipt; the organiser checks it, then confirms it here. */
 export async function confirmPayment(formData: FormData) {
+  await requireOrganiser();
   const supabase = await createClient();
   const id = str(formData, "id");
   const { data: sub } = await supabase
     .from("subscriptions")
-    .select("member_id, group_id, month")
+    .select("member_id, group_id, month, price_pence, members(name)")
     .eq("id", id)
     .single();
   const { error } = await supabase
@@ -602,28 +687,48 @@ export async function confirmPayment(formData: FormData) {
     .update({ status: "confirmed", confirmed_at: new Date().toISOString() })
     .eq("id", id);
   check(error);
-  if (sub) await settlePayLater(supabase, sub.member_id, sub.group_id, sub.month);
+  if (sub) {
+    await settlePayLater(supabase, sub.member_id, sub.group_id, sub.month);
+    const who = (sub.members as unknown as { name: string } | null)?.name ?? "someone";
+    await logActivity(
+      supabase,
+      "Confirmed payment",
+      `${who}, ${pounds(sub.price_pence)} for ${monthName(sub.month)}`,
+      sub.group_id,
+    );
+  }
   refresh();
 }
 
 // ---------- Settings: plans ----------
 
 export async function savePlan(formData: FormData) {
+  await requireOrganiser();
   const supabase = await createClient();
-  const { error } = await supabase
+  const { data: saved, error } = await supabase
     .from("plans")
     .update({
       name: str(formData, "name"),
       sessions_per_week: Number(str(formData, "sessions")) || 1,
       price_pence: toPence(str(formData, "price")),
     })
-    .eq("id", str(formData, "id"));
+    .eq("id", str(formData, "id"))
+    .select("name, sessions_per_week, price_pence, group_id")
+    .maybeSingle();
   check(error);
+  if (saved)
+    await logActivity(
+      supabase,
+      "Changed plan",
+      `${saved.name}: ${saved.sessions_per_week} a week, ${pounds(saved.price_pence)} a month`,
+      saved.group_id,
+    );
   refresh();
 }
 
 /** Adds a plan to the group being viewed. */
 export async function addPlan(formData: FormData) {
+  await requireOrganiser();
   const supabase = await createClient();
   const group = await requireGroup();
   const sessions = Number(str(formData, "sessions")) || 1;
@@ -640,6 +745,7 @@ export async function addPlan(formData: FormData) {
 }
 
 export async function setPlanActive(formData: FormData) {
+  await requireOrganiser();
   const supabase = await createClient();
   const { error } = await supabase
     .from("plans")
@@ -653,6 +759,7 @@ export async function setPlanActive(formData: FormData) {
 
 /** Adds a weekly session to the group being viewed, and creates its sessions. */
 export async function addSlot(formData: FormData) {
+  await requireOrganiser();
   const supabase = await createClient();
   const group = await requireGroup();
   const time = str(formData, "time");
@@ -671,6 +778,7 @@ export async function addSlot(formData: FormData) {
 
 /** Changes a weekly session. Its upcoming sessions follow (see migration 009). */
 export async function updateSlot(formData: FormData) {
+  await requireOrganiser();
   const supabase = await createClient();
   const { data, error } = await supabase.rpc("update_slot", {
     p_slot_id: str(formData, "id"),
@@ -679,17 +787,34 @@ export async function updateSlot(formData: FormData) {
     p_title: str(formData, "title") || "Workout session",
   });
   check(error);
+  await logActivity(
+    supabase,
+    "Changed weekly timetable",
+    `${str(formData, "title") || "Workout session"}, now ${WEEKDAYS[(Number(str(formData, "weekday")) || 1) - 1]} ${formatTime(str(formData, "time"))}`,
+  );
   refresh();
   redirect(`/settings?timetable=changed&n=${Number(data) || 0}`);
 }
 
 /** Removes a weekly session and its upcoming sessions nobody has attended yet. */
 export async function deleteSlot(formData: FormData) {
+  await requireOrganiser();
   const supabase = await createClient();
-  const { data, error } = await supabase.rpc("remove_slot", {
-    p_slot_id: str(formData, "id"),
-  });
+  const slotId = str(formData, "id");
+  const { data: slot } = await supabase
+    .from("schedule_slots")
+    .select("weekday, start_time, title, group_id")
+    .eq("id", slotId)
+    .maybeSingle();
+  const { data, error } = await supabase.rpc("remove_slot", { p_slot_id: slotId });
   check(error);
+  if (slot)
+    await logActivity(
+      supabase,
+      "Removed from weekly timetable",
+      `${slot.title}, ${WEEKDAYS[slot.weekday - 1]} ${formatTime(slot.start_time)}`,
+      slot.group_id,
+    );
   refresh();
   redirect(`/settings?timetable=removed&n=${Number(data) || 0}`);
 }
@@ -730,6 +855,7 @@ export async function makeLoginLink(
   _prev: LinkState,
   formData: FormData,
 ): Promise<LinkState> {
+  if (!(await isOrganiser())) return { error: "Only the organiser can do that." };
   const supabase = await createClient();
   return issueLink(supabase, str(formData, "memberId"));
 }
@@ -743,6 +869,7 @@ export async function approveRequest(
   _prev: LinkState,
   formData: FormData,
 ): Promise<LinkState> {
+  if (!(await isOrganiser())) return { error: "Only the organiser can do that." };
   const supabase = await createClient();
   const memberId = str(formData, "memberId");
   const groupId = str(formData, "groupId");
@@ -816,6 +943,7 @@ export async function addExpense(
   _prev: ExpenseState,
   formData: FormData,
 ): Promise<ExpenseState> {
+  if (!(await isOrganiser())) return { error: "Only the organiser can do that." };
   const supabase = await createClient();
   const group = await requireGroup();
 
@@ -857,19 +985,100 @@ export async function addExpense(
     if (receiptPath) await deleteReceipt(receiptPath).catch(() => {});
     return { error: error.message };
   }
+  await logActivity(
+    supabase,
+    "Added cost",
+    `${EXPENSE_CATEGORIES[category as keyof typeof EXPENSE_CATEGORIES]} ${pounds(amount)}` +
+      (months > 1 ? ` over ${months} months` : "") +
+      (str(formData, "scope") === "all" ? ", shared by all groups" : ""),
+    str(formData, "scope") === "all" ? null : group.id,
+  );
   refresh();
   return { ok: true };
 }
 
 export async function deleteExpense(formData: FormData) {
+  await requireOrganiser();
   const supabase = await createClient();
   const { data, error } = await supabase
     .from("expenses")
     .delete()
     .eq("id", str(formData, "id"))
-    .select("receipt_path");
+    .select("receipt_path, category, amount_pence, group_id");
   check(error);
-  const path = (data?.[0] as { receipt_path: string | null } | undefined)?.receipt_path;
-  if (path) await deleteReceipt(path).catch(() => {});
+  const gone = data?.[0] as
+    | { receipt_path: string | null; category: string; amount_pence: number; group_id: string | null }
+    | undefined;
+  if (gone?.receipt_path) await deleteReceipt(gone.receipt_path).catch(() => {});
+  if (gone)
+    await logActivity(
+      supabase,
+      "Removed cost",
+      `${EXPENSE_CATEGORIES[gone.category as keyof typeof EXPENSE_CATEGORIES] ?? "Cost"} ${pounds(gone.amount_pence)}`,
+      gone.group_id,
+    );
+  refresh();
+}
+
+// ---------- Team: helpers at the door ----------
+
+/**
+ * Gives someone a helper login: they sign in on the same page with this email
+ * and password, and can take the register but not touch money or settings.
+ */
+export async function addHelper(formData: FormData) {
+  await requireOrganiser();
+  const name = str(formData, "name").slice(0, 60);
+  const email = str(formData, "email").toLowerCase();
+  const password = String(formData.get("password") ?? "");
+  const back = (msg: string) =>
+    redirect("/settings?error=" + encodeURIComponent(msg) + "#team");
+  if (!name || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email))
+    back("Enter the helper's name and email address.");
+  if (password.length < 8) back("The password needs at least 8 characters.");
+
+  const admin = createAdminClient();
+  const { data: created, error } = await admin.auth.admin.createUser({
+    email,
+    password,
+    email_confirm: true,
+    user_metadata: { name },
+  });
+  if (error || !created.user)
+    back(
+      error?.message.toLowerCase().includes("already")
+        ? "That email already has a login."
+        : `Couldn't add the helper: ${error?.message ?? "unknown problem"}`,
+    );
+  const { error: e2 } = await admin
+    .from("staff")
+    .insert({ user_id: created.user!.id, name, role: "helper" });
+  if (e2) {
+    await admin.auth.admin.deleteUser(created.user!.id).catch(() => {});
+    back(`Couldn't add the helper: ${e2.message}`);
+  }
+  const supabase = await createClient();
+  await logActivity(supabase, "Added helper", `${name} (${email})`);
+  refresh();
+  redirect("/settings?team=added#team");
+}
+
+/** Removes a helper's login completely. The organiser can't be removed here. */
+export async function removeHelper(formData: FormData) {
+  const me = await requireOrganiser();
+  const userId = str(formData, "userId");
+  if (!userId || userId === me.id) return;
+  const admin = createAdminClient();
+  const { data: row } = await admin
+    .from("staff")
+    .select("name, role")
+    .eq("user_id", userId)
+    .maybeSingle();
+  if (!row || row.role !== "helper") return;
+  const { error } = await admin.from("staff").delete().eq("user_id", userId);
+  check(error);
+  await admin.auth.admin.deleteUser(userId).catch(() => {});
+  const supabase = await createClient();
+  await logActivity(supabase, "Removed helper", String(row.name ?? ""));
   refresh();
 }

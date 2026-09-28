@@ -24,6 +24,11 @@ const nextConfig = {
           },
         ],
       },
+      {
+        // Phones always check for a newer offline helper.
+        source: "/sw.js",
+        headers: [{ key: "Cache-Control", value: "no-cache" }],
+      },
     ];
   },
 

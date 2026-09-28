@@ -5,19 +5,21 @@ import { usePathname } from "next/navigation";
 import { Icon } from "./Icon";
 
 const ITEMS = [
-  { href: "/sessions", label: "Sessions", icon: "clip" },
-  { href: "/members", label: "Members", icon: "users" },
-  { href: "/payments", label: "Payments", icon: "wallet" },
-  { href: "/share", label: "Share", icon: "send" },
-  { href: "/settings", label: "Settings", icon: "sliders" },
+  { href: "/sessions", label: "Sessions", icon: "clip", helper: true },
+  { href: "/members", label: "Members", icon: "users", helper: true },
+  { href: "/payments", label: "Payments", icon: "wallet", helper: false },
+  { href: "/share", label: "Share", icon: "send", helper: true },
+  { href: "/settings", label: "Settings", icon: "sliders", helper: false },
 ];
 
-export function Nav() {
+/** Helpers only see the screens they need at the door. */
+export function Nav({ role }: { role: "organiser" | "helper" }) {
   const path = usePathname();
+  const items = ITEMS.filter((i) => role === "organiser" || i.helper);
   return (
     <nav className="bottom-nav" aria-label="Main menu">
       <div className="inner">
-        {ITEMS.map((item) => {
+        {items.map((item) => {
           const on = path.startsWith(item.href);
           return (
             <Link

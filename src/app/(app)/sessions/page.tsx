@@ -13,6 +13,7 @@ import { PageHead } from "@/components/PageHead";
 import { Icon } from "@/components/Icon";
 import { SubmitButton } from "@/components/SubmitButton";
 import { requireGroup } from "@/lib/groups";
+import { getStaff } from "@/lib/staff";
 import type { Session } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
@@ -35,6 +36,7 @@ export default async function SessionsPage({
   const { week } = await searchParams;
   const supabase = await createClient();
   const group = await requireGroup();
+  const isOrganiser = (await getStaff())?.role === "organiser";
   const today = todayISO();
   const thisMonday = weekStart(today);
   // The week being looked at: this week unless ‹ › was tapped.
@@ -265,7 +267,7 @@ export default async function SessionsPage({
         </div>
       )}
 
-      <div className="stack" style={{ marginTop: 28 }}>
+      <div className="stack" style={{ marginTop: 28 }} hidden={!isOrganiser}>
         {(slotCount ?? 0) > 0 ? (
           <form action={generateSessions}>
             <SubmitButton

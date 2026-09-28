@@ -24,6 +24,7 @@ import {
   undoHere,
 } from "@/app/actions";
 import { getGroupContext } from "@/lib/groups";
+import { getStaff } from "@/lib/staff";
 import { ShareToWhatsApp } from "@/components/ShareToWhatsApp";
 import { Avatar } from "@/components/Avatar";
 import { Icon } from "@/components/Icon";
@@ -160,13 +161,16 @@ export default async function RegisterPage({
   const { q, moved, cancelled: justCancelled, error } = await searchParams;
   const supabase = await createClient();
 
-  // Round 1: the session, who said they're coming, and the groups.
-  const [{ data: sessionRow }, { data: rsvpData }, { groups }] =
+  // Round 1: the session, who said they're coming, the groups and who's signed in.
+  const [{ data: sessionRow }, { data: rsvpData }, { groups }, staff] =
     await Promise.all([
       supabase.from("sessions").select("*").eq("id", id).maybeSingle(),
       supabase.from("rsvps").select("member_id, coming").eq("session_id", id),
       getGroupContext(),
+      getStaff(),
     ]);
+  // Helpers take the register; only the organiser moves or cancels sessions.
+  const isOrganiser = staff?.role === "organiser";
   if (!sessionRow) notFound();
   const session = sessionRow as Session;
   const groupNameOf = groups.find((g) => g.id === session.group_id)?.name ?? "";
@@ -477,7 +481,7 @@ export default async function RegisterPage({
           </form>
         </details>
 
-        {!session.cancelled && !isPast && !anyoneHere ? (
+        {isOrganiser && !session.cancelled && !isPast && !anyoneHere ? (
           <details className="details">
             <summary>
               <Icon name="clock" /> Move or rename this session
@@ -526,7 +530,7 @@ export default async function RegisterPage({
           </details>
         ) : null}
 
-        {session.cancelled ? (
+        {!isOrganiser ? null : session.cancelled ? (
           <form action={restoreSession}>
             <Hidden name="sessionId" value={id} />
             <SubmitButton

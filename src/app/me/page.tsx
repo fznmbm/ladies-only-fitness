@@ -307,6 +307,9 @@ export default async function MePage() {
       <div style={{ marginTop: 24 }}>
         <InstallHint />
       </div>
+      <p className="small muted" style={{ marginTop: 24, textAlign: "center" }}>
+        <a href="/privacy">Your privacy</a>
+      </p>
     </>
   );
 }

@@ -112,6 +112,10 @@ export default async function JoinPage({
             >
               Send request
             </SubmitButton>
+            <p className="small muted">
+              Your name and number are only used to run the group.{" "}
+              <a href="/privacy">How we look after your details</a>.
+            </p>
           </form>
         </>
       )}

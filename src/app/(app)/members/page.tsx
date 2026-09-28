@@ -18,6 +18,7 @@ import { JoinRequests } from "@/components/LoginLink";
 import { AutoRefresh } from "@/components/AutoRefresh";
 import { ShareToWhatsApp } from "@/components/ShareToWhatsApp";
 import { requireGroup } from "@/lib/groups";
+import { getStaff } from "@/lib/staff";
 import type { Member, Subscription } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
@@ -39,6 +40,7 @@ export default async function MembersPage({
 
   const supabase = await createClient();
   const group = await requireGroup();
+  const isOrganiser = (await getStaff())?.role === "organiser";
   const today = todayISO();
   const month = monthStart(today);
   const nextMonth = addMonths(month, 1);
@@ -168,6 +170,7 @@ export default async function MembersPage({
         </div>
       ) : null}
 
+      {isOrganiser ? (
       <JoinRequests
         requests={pending.map((r) => ({
           id: r.id,
@@ -177,9 +180,10 @@ export default async function MembersPage({
           existing: r.status === "active",
         }))}
       />
+      ) : null}
 
       <div className="stack">
-        <details className="details">
+        <details className="details" hidden={!isOrganiser}>
           <summary>
             <Icon name="plus" /> Add a member
           </summary>

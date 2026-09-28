@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { getStaff } from "@/lib/staff";
 import { Nav } from "@/components/Nav";
 import { GroupSwitcher } from "@/components/GroupSwitcher";
 import { getGroupContext } from "@/lib/groups";
@@ -22,11 +23,7 @@ export default async function AppLayout({
     : null;
   if (!user) redirect("/login");
 
-  const { data: staff } = await supabase
-    .from("staff")
-    .select("role")
-    .eq("user_id", user.id)
-    .maybeSingle();
+  const staff = await getStaff();
 
   if (!staff) {
     return (
@@ -67,7 +64,7 @@ export default async function AppLayout({
         </div>
         {children}
       </div>
-      <Nav />
+      <Nav role={staff.role} />
     </>
   );
 }

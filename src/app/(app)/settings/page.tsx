@@ -1,11 +1,15 @@
 import Link from "next/link";
+import { redirect } from "next/navigation";
+import { getStaff } from "@/lib/staff";
 import { createClient } from "@/lib/supabase/server";
 import { WEEKDAYS, formatTime } from "@/lib/dates";
 import {
   addGroup,
+  addHelper,
   addPlan,
   addSlot,
   deleteSlot,
+  removeHelper,
   renameGroup,
   savePlan,
   setGroupActive,
@@ -70,14 +74,27 @@ function DayTimeFields({ prefix, slot }: { prefix: string; slot?: Slot }) {
 export default async function SettingsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ timetable?: string; n?: string; error?: string }>;
+  searchParams: Promise<{
+    timetable?: string;
+    n?: string;
+    error?: string;
+    team?: string;
+  }>;
 }) {
-  const { timetable, n, error } = await searchParams;
+  const { timetable, n, error, team } = await searchParams;
+  // Money and settings are for the organiser only.
+  if ((await getStaff())?.role !== "organiser") redirect("/sessions");
+
   const supabase = await createClient();
   const group = await requireGroup();
   const { groups } = await getGroupContext();
 
-  const [{ data: plansData }, { data: slotsData }] = await Promise.all([
+  const [
+    { data: plansData },
+    { data: slotsData },
+    { data: staffData },
+    { data: activityData },
+  ] = await Promise.all([
     supabase
       .from("plans")
       .select("*")
@@ -90,7 +107,34 @@ export default async function SettingsPage({
       .eq("group_id", group.id)
       .order("weekday")
       .order("start_time"),
+    supabase.from("staff").select("user_id, name, role").order("role").order("name"),
+    supabase
+      .from("activity_log")
+      .select("id, at, staff_name, action, detail")
+      .order("at", { ascending: false })
+      .limit(40),
   ]);
+  const me = await getStaff();
+  const staffList = (staffData ?? []) as {
+    user_id: string;
+    name: string | null;
+    role: string;
+  }[];
+  const activity = (activityData ?? []) as {
+    id: number;
+    at: string;
+    staff_name: string | null;
+    action: string;
+    detail: string | null;
+  }[];
+  const when = new Intl.DateTimeFormat("en-GB", {
+    timeZone: "Europe/London",
+    weekday: "short",
+    day: "numeric",
+    month: "short",
+    hour: "numeric",
+    minute: "2-digit",
+  });
   const plans = (plansData ?? []) as Plan[];
   const slots = (slotsData ?? []) as Slot[];
   const active = plans.filter((p) => p.active);
@@ -466,6 +510,118 @@ export default async function SettingsPage({
           </div>
         </details>
       ) : null}
+
+      <h2 className="section-title" id="team" style={{ marginTop: 32 }}>
+        Team
+      </h2>
+      {team === "added" ? (
+        <div className="note" role="status" style={{ marginBottom: 12 }}>
+          <Icon name="check" />
+          <span>
+            Helper added. Send her the email and password; she signs in on the
+            same sign-in page as you.
+          </span>
+        </div>
+      ) : null}
+      <div className="note" style={{ marginBottom: 12 }}>
+        <Icon name="users" />
+        <span>
+          Helpers can take the register, add walk-ins and take cash at the
+          door. They can&apos;t see payments or accounts, change settings, or
+          delete anyone.
+        </span>
+      </div>
+      <ul className="list" style={{ marginBottom: 12 }}>
+        {staffList.map((p) => (
+          <li key={p.user_id} className="row-main" style={{ minHeight: 60 }}>
+            <div className="grow">
+              <div className="name">
+                {p.name || "Organiser"}
+                {p.user_id === me?.id ? " (you)" : ""}
+              </div>
+              <div className="sub">{p.role === "helper" ? "Helper" : "Organiser"}</div>
+            </div>
+            {p.role === "helper" ? (
+              <form action={removeHelper}>
+                <input type="hidden" name="userId" value={p.user_id} />
+                <ConfirmSubmit
+                  className="btn btn-quiet btn-small"
+                  confirm={`Remove ${p.name || "this helper"}? Her login stops working straight away.`}
+                >
+                  Remove
+                </ConfirmSubmit>
+              </form>
+            ) : null}
+          </li>
+        ))}
+      </ul>
+      <details className="details">
+        <summary>
+          <Icon name="plus" /> Add a helper
+        </summary>
+        <form action={addHelper}>
+          <div className="field">
+            <label htmlFor="helper-name">Name</label>
+            <input id="helper-name" name="name" required maxLength={60} />
+          </div>
+          <div className="field">
+            <label htmlFor="helper-email">Email</label>
+            <input
+              id="helper-email"
+              name="email"
+              type="email"
+              autoComplete="off"
+              required
+            />
+          </div>
+          <div className="field">
+            <label htmlFor="helper-password">Password for her (8+ characters)</label>
+            <input
+              id="helper-password"
+              name="password"
+              type="text"
+              autoComplete="new-password"
+              minLength={8}
+              required
+            />
+          </div>
+          <p className="small muted" style={{ marginBottom: 12 }}>
+            Send her the email and password privately. She can use them on any
+            phone.
+          </p>
+          <SubmitButton className="btn btn-primary btn-block" pendingText="Adding…">
+            Add helper
+          </SubmitButton>
+        </form>
+      </details>
+
+      <h2 className="section-title" style={{ marginTop: 32 }}>
+        Recent activity
+      </h2>
+      {activity.length === 0 ? (
+        <div className="card empty">
+          Payments, deletions, cancellations and other changes will be listed
+          here.
+        </div>
+      ) : (
+        <details className="details">
+          <summary>Show the last {activity.length} changes</summary>
+          <ul className="list" style={{ margin: "0 14px 14px" }}>
+            {activity.map((a) => (
+              <li key={a.id} className="row-main" style={{ minHeight: 56 }}>
+                <div className="grow">
+                  <div className="name">{a.action}</div>
+                  <div className="sub">
+                    {a.detail ? `${a.detail}. ` : ""}
+                    {when.format(new Date(a.at))}
+                    {a.staff_name ? `, by ${a.staff_name}` : ""}
+                  </div>
+                </div>
+              </li>
+            ))}
+          </ul>
+        </details>
+      )}
 
       <form action={signOut} style={{ marginTop: 32 }}>
         <SubmitButton

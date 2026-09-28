@@ -13,7 +13,11 @@ function isPublic(path: string): boolean {
     path.startsWith("/me/") ||
     // The nightly job that creates sessions checks its own secret.
     path.startsWith("/api/cron/") ||
-    path === "/manifest.webmanifest"
+    path === "/manifest.webmanifest" ||
+    // The offline helper, its "no signal" page, and the privacy notice.
+    path === "/sw.js" ||
+    path === "/offline.html" ||
+    path === "/privacy"
   );
 }
 
