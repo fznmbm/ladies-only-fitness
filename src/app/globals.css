@@ -414,6 +414,64 @@ input[type="checkbox"] {
   color: var(--muted);
   margin: 20px 0 8px;
 }
+
+/* ---------- Sessions: today's card and the week switcher ---------- */
+.today-card {
+  background: var(--plum);
+  color: #fff;
+  border-radius: 22px;
+  padding: 18px;
+}
+.today-label {
+  font-size: 13px;
+  font-weight: 700;
+  opacity: 0.8;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.today-time {
+  font-family: var(--font-display), Georgia, serif;
+  font-weight: 600;
+  font-size: 30px;
+  line-height: 1.2;
+  margin-top: 2px;
+}
+.today-time span {
+  display: block;
+  font-family: var(--font-sans), system-ui, sans-serif;
+  font-size: 16px;
+  font-weight: 500;
+  opacity: 0.85;
+}
+.chip-light {
+  background: rgba(255, 255, 255, 0.16);
+  color: #fff;
+}
+.btn-light {
+  background: #fff;
+  color: var(--plum);
+  min-height: 52px;
+}
+.week-nav {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin: 4px 0 10px;
+}
+.week-title {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+}
+.week-title strong {
+  font-size: 17px;
+}
+.week-title span {
+  font-size: 13px;
+  color: var(--muted);
+}
 .day-heading.today {
   color: var(--plum);
 }
