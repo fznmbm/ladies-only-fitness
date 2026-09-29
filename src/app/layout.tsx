@@ -70,8 +70,20 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en-GB" className={`${sans.variable} ${display.variable}`}>
+    <html
+      lang="en-GB"
+      className={`${sans.variable} ${display.variable}`}
+      // The theme script below may set data-theme before React loads.
+      suppressHydrationWarning
+    >
       <head>
+        {/* Dark mode, if she chose it on this phone. Runs before anything is
+            drawn, so the page never flashes light first. */}
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `try{if(/(?:^|; )theme=dark(?:;|$)/.test(document.cookie))document.documentElement.dataset.theme="dark"}catch(e){}`,
+          }}
+        />
         {/* Starts the offline helper (shows a "no signal" page instead of an error), and
             catches the "install this app" offer as soon as Chrome makes it, before the
             page has finished loading. The Add to home screen button picks it up from here. */}

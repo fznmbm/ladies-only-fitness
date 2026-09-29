@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { getStaff } from "@/lib/staff";
 import { Nav } from "@/components/Nav";
 import { GroupSwitcher } from "@/components/GroupSwitcher";
+import { ThemeToggle } from "@/components/ThemeToggle";
 import { getGroupContext } from "@/lib/groups";
 import { SubmitButton } from "@/components/SubmitButton";
 import { signOut } from "@/app/login/actions";
@@ -69,6 +70,7 @@ export default async function AppLayout({
             <span aria-hidden="true">·</span>
             <button type="submit">Sign out</button>
           </form>
+          <ThemeToggle />
         </div>
         {children}
       </div>

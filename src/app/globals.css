@@ -8,7 +8,40 @@
   --brick-tint: #fbe6df;
   --line: #e6dbd0;
   --sand: #f3ebe2;
+  /* Cards, lists, inputs and the bottom bar. */
+  --card: #ffffff;
+  /* Text on plum buttons and chips. */
+  --on-plum: #ffffff;
+  /* The big plum cards (Today, Your plan, Profit) and the white button on them. */
+  --hero: #681c4c;
+  --hero-btn: #ffffff;
   --radius: 18px;
+  color-scheme: light;
+}
+
+/* Dark mode, chosen with the moon button at the top. Same plum family, but
+   lighter where plum is used for text, so everything stays easy to read. */
+:root[data-theme="dark"] {
+  --bg: #1a1218;
+  --ink: #f3e9ef;
+  --muted: #b9a5b3;
+  --plum: #e6a6cc;
+  --plum-tint: #3b2433;
+  --brick: #f3a38e;
+  --brick-tint: #3d221d;
+  --line: #3b2c35;
+  --sand: #2e2229;
+  --card: #251b22;
+  --on-plum: #2a0d20;
+  --hero: #5e1f48;
+  --hero-btn: #f6ecf1;
+  color-scheme: dark;
+}
+:root[data-theme="dark"] img[src$="/brand/livefit-logo.png"] {
+  content: url("/brand/livefit-logo-dark.png");
+}
+:root[data-theme="dark"] img[src$="/brand/livefit-mark.png"] {
+  content: url("/brand/livefit-mark-dark.png");
 }
 
 * {
@@ -209,13 +242,13 @@ a {
 
 /* ---------- Cards and lists ---------- */
 .card {
-  background: #fff;
+  background: var(--card);
   border: 1px solid var(--line);
   border-radius: var(--radius);
   padding: 14px;
 }
 .list {
-  background: #fff;
+  background: var(--card);
   border: 1px solid var(--line);
   border-radius: var(--radius);
   overflow: hidden;
@@ -284,27 +317,27 @@ a {
   border: 1.5px solid transparent;
   cursor: pointer;
   text-decoration: none;
-  background: #fff;
+  background: var(--card);
   color: var(--plum);
 }
 .btn-primary {
   background: var(--plum);
-  color: #fff;
+  color: var(--on-plum);
 }
 .btn-outline {
   border-color: var(--plum);
   color: var(--plum);
-  background: #fff;
+  background: var(--card);
 }
 .btn-quiet {
   border-color: var(--line);
   color: var(--muted);
-  background: #fff;
+  background: var(--card);
 }
 .btn-danger {
   border-color: var(--brick);
   color: var(--brick);
-  background: #fff;
+  background: var(--card);
 }
 .btn-block {
   width: 100%;
@@ -344,7 +377,7 @@ button.btn {
 }
 .chip-solid {
   background: var(--plum);
-  color: #fff;
+  color: var(--on-plum);
 }
 .chip-warn {
   background: var(--brick-tint);
@@ -377,12 +410,12 @@ button.btn {
   text-decoration: none;
   border: 1.5px solid var(--line);
   color: var(--muted);
-  background: #fff;
+  background: var(--card);
 }
 .filter.on {
   background: var(--plum);
   border-color: var(--plum);
-  color: #fff;
+  color: var(--on-plum);
 }
 
 /* ---------- Notes and messages ---------- */
@@ -428,7 +461,7 @@ textarea {
   padding: 0 14px;
   border: 1.5px solid var(--line);
   border-radius: 14px;
-  background: #fff;
+  background: var(--card);
 }
 textarea {
   padding: 12px 14px;
@@ -451,7 +484,7 @@ input[type="checkbox"] {
 }
 
 .details {
-  background: #fff;
+  background: var(--card);
   border: 1.5px solid var(--line);
   border-radius: var(--radius);
 }
@@ -490,8 +523,8 @@ input[type="checkbox"] {
 
 /* ---------- Sessions: today's card and the week switcher ---------- */
 .today-card {
-  background: var(--plum);
-  color: #fff;
+  background: var(--hero);
+  color: #ffffff;
   border-radius: 22px;
   padding: 18px;
 }
@@ -518,11 +551,11 @@ input[type="checkbox"] {
 }
 .chip-light {
   background: rgba(255, 255, 255, 0.16);
-  color: #fff;
+  color: #ffffff;
 }
 .btn-light {
-  background: #fff;
-  color: var(--plum);
+  background: var(--hero-btn);
+  color: var(--hero);
   min-height: 52px;
 }
 .week-nav {
@@ -553,7 +586,7 @@ input[type="checkbox"] {
   align-items: center;
   gap: 14px;
   text-decoration: none;
-  background: #fff;
+  background: var(--card);
   border: 1px solid var(--line);
   border-radius: var(--radius);
   padding: 14px 16px;
@@ -595,7 +628,7 @@ input[type="checkbox"] {
 .door .btn-outline-brick {
   border-color: var(--brick);
   color: var(--brick);
-  background: #fff;
+  background: var(--card);
 }
 
 /* ---------- Bottom navigation ---------- */
@@ -604,7 +637,7 @@ input[type="checkbox"] {
   left: 0;
   right: 0;
   bottom: 0;
-  background: #fff;
+  background: var(--card);
   border-top: 1px solid var(--line);
   z-index: 10;
 }
@@ -688,8 +721,8 @@ input[type="checkbox"] {
 
 /* ---------- Ladies' side ---------- */
 .plan-card {
-  background: var(--plum);
-  color: #fff;
+  background: var(--hero);
+  color: #ffffff;
   border-radius: 22px;
   padding: 18px;
 }
@@ -718,8 +751,8 @@ input[type="checkbox"] {
   border: 1.5px solid rgba(255, 255, 255, 0.7);
 }
 .dot.used {
-  background: #fff;
-  border-color: #fff;
+  background: #ffffff;
+  border-color: #ffffff;
 }
 .dots-text {
   font-size: 13px;
@@ -764,7 +797,7 @@ input[type="checkbox"] {
   margin-bottom: 4px;
 }
 .money-tile {
-  background: #fff;
+  background: var(--card);
   border: 1px solid var(--line);
   border-radius: var(--radius);
   padding: 12px 10px;
@@ -782,9 +815,9 @@ input[type="checkbox"] {
   overflow-wrap: anywhere;
 }
 .money-tile.profit {
-  background: var(--plum);
-  border-color: var(--plum);
-  color: #fff;
+  background: var(--hero);
+  border-color: var(--hero);
+  color: #ffffff;
 }
 .money-tile.profit span {
   color: rgba(255, 255, 255, 0.8);
@@ -833,7 +866,7 @@ input[type="checkbox"] {
 /* ---------- "Put LiveFit on your home screen" card ---------- */
 /* "Add LiveFit to your home screen": one slim row, steps open on "How?". */
 .install-bar {
-  background: #fff;
+  background: var(--card);
   border: 1px solid var(--line);
   border-radius: var(--radius);
   padding: 8px 8px 8px 12px;
@@ -962,7 +995,7 @@ input[type="checkbox"] {
   border-radius: 999px;
   padding: 3px;
   gap: 3px;
-  background: #fff;
+  background: var(--card);
 }
 .rsvp form {
   flex: 1;
@@ -990,7 +1023,7 @@ input[type="checkbox"] {
 }
 .rsvp-btn.yes.on {
   background: var(--plum);
-  color: #fff;
+  color: var(--on-plum);
 }
 .rsvp-btn.no.on {
   background: var(--brick-tint);
@@ -1064,7 +1097,7 @@ input[type="checkbox"] {
   border: 1.5px solid var(--line);
   border-radius: 14px;
   padding: 8px;
-  background: #fff;
+  background: var(--card);
 }
 .receipt-picked img {
   width: 52px;
@@ -1136,7 +1169,7 @@ input[type="checkbox"] {
   height: 44px;
   border-radius: 999px;
   border: 1.5px solid var(--line);
-  background: #fff;
+  background: var(--card);
   color: var(--plum);
   display: inline-flex;
   align-items: center;
@@ -1150,7 +1183,7 @@ input[type="checkbox"] {
   gap: 8px;
 }
 .stat {
-  background: #fff;
+  background: var(--card);
   border: 1px solid var(--line);
   border-radius: 14px;
   padding: 10px 12px;
@@ -1207,7 +1240,7 @@ input[type="checkbox"] {
 }
 .fold-row[open] .fold-edit {
   background: var(--plum);
-  color: #fff;
+  color: var(--on-plum);
 }
 .fold-body {
   padding: 4px 14px 14px;
@@ -1254,4 +1287,28 @@ input[type="checkbox"] {
   text-decoration: underline;
   cursor: pointer;
   flex-shrink: 0;
+}
+
+/* The small moon / sun button at the top right. */
+.theme-toggle {
+  flex-shrink: 0;
+  width: 36px;
+  height: 36px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: var(--card);
+  color: var(--muted);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  padding: 0;
+}
+.theme-toggle:hover,
+.theme-toggle:focus-visible {
+  color: var(--plum);
+  border-color: var(--plum);
+}
+.org-top .theme-toggle {
+  margin-left: 2px;
 }

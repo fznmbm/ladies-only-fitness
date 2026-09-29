@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { APP_FULL_NAME } from "@/lib/config";
+import { ThemeToggle } from "@/components/ThemeToggle";
 
 // Each lady gets her own manifest, so the installed app reopens signed in.
 export const metadata: Metadata = {
@@ -16,7 +17,8 @@ export default function MemberLayout({
       <div className="brand-top">
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img src="/brand/livefit-mark.png" alt="" width={22} height={30} />
-        <span>{APP_FULL_NAME}</span>
+        <span className="grow">{APP_FULL_NAME}</span>
+        <ThemeToggle />
       </div>
       {children}
     </div>
