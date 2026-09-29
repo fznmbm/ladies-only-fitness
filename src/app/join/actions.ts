@@ -21,7 +21,8 @@ export async function requestToJoin(formData: FormData) {
   // Hidden field that only bots fill in.
   if (str(formData, "website")) redirect(`${back}?sent=1`);
 
-  if (!slug && needed && code !== needed) redirect("/join");
+  // Old long links need the right JOIN_CODE; with none set they're switched off.
+  if (!slug && (!needed || code !== needed)) redirect("/join");
 
   const name = str(formData, "name").slice(0, 80);
   const phone = str(formData, "phone").slice(0, 30);

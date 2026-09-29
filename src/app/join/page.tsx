@@ -14,10 +14,14 @@ type Params = {
   phone?: string;
 };
 
-/** The older, long join link: /join?g=…&code=… (still works). */
+/**
+ * The older, long join link: /join?g=…&code=…. It only works while JOIN_CODE
+ * is set in Vercel and matches. Delete JOIN_CODE to switch old links off;
+ * the short link (/join/livefitclub-…) doesn't use it.
+ */
 async function linkedGroup({ g = "", code = "" }: Params) {
   const needed = process.env.JOIN_CODE;
-  if (needed && code !== needed) return null;
+  if (!needed || code !== needed) return null;
   return joinableGroup(g);
 }
 
