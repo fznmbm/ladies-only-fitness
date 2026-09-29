@@ -74,11 +74,19 @@ export default async function MePage() {
     ]);
   const groups = (
     (groupRows ?? []) as unknown as {
-      groups: { id: string; name: string; sort: number; active: boolean } | null;
+      groups: {
+        id: string;
+        name: string;
+        sort: number;
+        active: boolean;
+      } | null;
     }[]
   )
     .map((r) => r.groups)
-    .filter((g): g is { id: string; name: string; sort: number; active: boolean } => !!g && g.active)
+    .filter(
+      (g): g is { id: string; name: string; sort: number; active: boolean } =>
+        !!g && g.active,
+    )
     .sort((a, b) => a.sort - b.sort || a.name.localeCompare(b.name));
   const groupIds = groups.map((g) => g.id);
   const manyGroups = groups.length > 1;
@@ -130,9 +138,12 @@ export default async function MePage() {
   const subs = (subData ?? []) as Subscription[];
   // Sessions of each group she has been marked at this week.
   const usedByGroup = new Map<string, number>();
+  const attended = new Set<string>();
   for (const v of (visitData ?? []) as unknown as {
+    session_id: string;
     sessions: { group_id: string } | null;
   }[]) {
+    attended.add(v.session_id);
     const g = v.sessions?.group_id;
     if (g) usedByGroup.set(g, (usedByGroup.get(g) ?? 0) + 1);
   }
@@ -150,6 +161,54 @@ export default async function MePage() {
     (s) => s.session_date >= today && s.session_date < nextWs,
   );
   const nextWeek = twoWeeks.filter((s) => s.session_date >= nextWs);
+
+  // A gentle reminder when she has said "I'm coming" to more sessions in a
+  // week than her plan covers. Sessions she has already been marked at count
+  // too. Nothing is stopped: extra sessions are simply paid on the day.
+  // No note without a plan for that month (she's asked to pay instead).
+  const overPlanNotes = (
+    week: Session[],
+    monday: string,
+    weekWord: string,
+    used: (groupId: string) => number,
+  ): string[] =>
+    groups.flatMap((g) => {
+      const sub = subs.find(
+        (s) => s.group_id === g.id && s.month === monthStart(monday),
+      );
+      if (!sub) return [];
+      const done = used(g.id);
+      const planned = week.filter(
+        (s) =>
+          s.group_id === g.id &&
+          !s.cancelled &&
+          !attended.has(s.id) &&
+          rsvpBySession.get(s.id) === true,
+      ).length;
+      const total = done + planned;
+      if (total <= sub.sessions_per_week) return [];
+      const extra = total - sub.sessions_per_week;
+      return [
+        `You've said you're coming to ${total} ${manyGroups ? `${g.name} ` : ""}sessions ${weekWord}` +
+          `${done > 0 ? ` (${done} already done)` : ""}. ` +
+          `Your plan covers ${sub.sessions_per_week} a week, so ` +
+          `${extra === 1 ? "the extra session is" : `the ${extra} extra sessions are`} paid on the day.`,
+      ];
+    });
+  const thisWeekNotes = overPlanNotes(
+    thisWeek,
+    ws,
+    "this week",
+    (g) => usedByGroup.get(g) ?? 0,
+  );
+  const nextWeekNotes = overPlanNotes(nextWeek, nextWs, "next week", () => 0);
+  const planNote = (notes: string[]) =>
+    notes.map((n) => (
+      <div key={n} className="note" role="status" style={{ marginBottom: 12 }}>
+        <Icon name="clock" />
+        <span>{n}</span>
+      </div>
+    ));
 
   // One session in her list: a small calendar block, the time, and her
   // "I'm coming" switch. If she can't make it, it suggests the other sessions
@@ -199,7 +258,9 @@ export default async function MePage() {
                   <Icon name="clock" size={16} />
                   <span>
                     You can still come{" "}
-                    {joinList(otherOptions.map((o) => formatDate(o.session_date)))}{" "}
+                    {joinList(
+                      otherOptions.map((o) => formatDate(o.session_date)),
+                    )}{" "}
                     {weekWord}.
                   </span>
                 </p>
@@ -248,8 +309,8 @@ export default async function MePage() {
             return (
               <div key={g.id} className="note warn">
                 You don&apos;t have a {manyGroups ? `${g.name} ` : ""}plan for{" "}
-                {monthName(month)} yet. Pay by bank transfer, or give cash to the
-                organiser at a session.
+                {monthName(month)} yet. Pay by bank transfer, or give cash to
+                the organiser at a session.
               </div>
             );
           }
@@ -299,6 +360,7 @@ export default async function MePage() {
         Tapping is free. It only uses your plan once the organiser marks you
         here.
       </p>
+      {planNote(thisWeekNotes)}
       {thisWeek.length === 0 ? (
         <div className="card empty">No more sessions this week.</div>
       ) : (
@@ -312,13 +374,18 @@ export default async function MePage() {
           Next week&apos;s sessions aren&apos;t up yet.
         </p>
       ) : (
-        <details className="details week-more">
+        <details className="details week-more" open={nextWeekNotes.length > 0}>
           <summary>
             <span className="grow">Next week</span>
             <span className="summary-note">
               {nextWeek.filter((s) => !s.cancelled).length} sessions
             </span>
           </summary>
+          {nextWeekNotes.length > 0 ? (
+            <div style={{ padding: "12px 12px 0" }}>
+              {planNote(nextWeekNotes)}
+            </div>
+          ) : null}
           <ul className="list">
             {nextWeek.map((s) => sessionRow(s, nextWeek, "next week"))}
           </ul>
