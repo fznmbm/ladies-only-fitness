@@ -161,6 +161,12 @@ export default async function AccountsPage({
     memberCount !== null && paidCount !== null
       ? Math.max(0, (memberCount ?? 0) - (paidCount ?? 0))
       : null;
+  // The table starts at the first month with anything in it, so a new
+  // group doesn't see a column of empty months.
+  const firstUsed = rows.findIndex(
+    (r) => r.income !== 0 || r.costs !== 0 || r.month === month,
+  );
+  const tableRows = firstUsed > 0 ? rows.slice(firstUsed) : rows;
   const year12 = rows.reduce(
     (t, r) => ({ income: t.income + r.income, costs: t.costs + r.costs }),
     { income: 0, costs: 0 },
@@ -289,41 +295,48 @@ export default async function AccountsPage({
             const url = receiptUrls.get(e.id);
             const spread = e.covers_months > 1;
             return (
-              <li key={e.id} className="row-main">
-                <div className="grow">
-                  <div className="name">
-                    {EXPENSE_CATEGORIES[e.category] ?? "Other"}
-                    {e.description ? `, ${e.description}` : ""}
-                  </div>
-                  <div className="sub">
-                    Paid {formatDate(e.paid_on)}
-                    {spread
-                      ? `, ${pounds(e.amount_pence)} over ${e.covers_months} months`
-                      : ""}
-                    {all
-                      ? `, ${e.group_id ? (groupName.get(e.group_id) ?? "old group") : "shared"}`
-                      : ""}
-                    {url ? (
-                      <>
-                        {", "}
-                        <a href={url} target="_blank" rel="noopener noreferrer">
-                          receipt
-                        </a>
-                      </>
-                    ) : null}
-                  </div>
-                </div>
-                <div className="name">{pounds(share)}</div>
-                <form action={deleteExpense}>
-                  <input type="hidden" name="id" value={e.id} />
-                  <ConfirmSubmit
-                    className="btn btn-quiet btn-small"
-                    aria-label="Remove this cost"
-                    confirm={`Remove this ${pounds(e.amount_pence)} cost${spread ? ` (from all ${e.covers_months} months)` : ""}?`}
-                  >
-                    <Icon name="x" size={18} />
-                  </ConfirmSubmit>
-                </form>
+              <li key={e.id}>
+                {/* Tap a cost to see the option to remove it. */}
+                <details className="fold-row">
+                  <summary className="row-main">
+                    <div className="grow">
+                      <div className="name">
+                        {e.description || EXPENSE_CATEGORIES[e.category] || "Other"}
+                      </div>
+                      <div className="sub">
+                        {e.description
+                          ? `${EXPENSE_CATEGORIES[e.category] ?? "Other"} · `
+                          : ""}
+                        paid {formatDate(e.paid_on)}
+                        {spread
+                          ? `, ${pounds(e.amount_pence)} over ${e.covers_months} months`
+                          : ""}
+                        {all
+                          ? `, ${e.group_id ? (groupName.get(e.group_id) ?? "old group") : "shared"}`
+                          : ""}
+                        {url ? (
+                          <>
+                            {", "}
+                            <a href={url} target="_blank" rel="noopener noreferrer">
+                              receipt
+                            </a>
+                          </>
+                        ) : null}
+                      </div>
+                    </div>
+                    <div className="name">{pounds(share)}</div>
+                  </summary>
+                  <form action={deleteExpense} className="fold-body">
+                    <input type="hidden" name="id" value={e.id} />
+                    <span className="small muted grow">Added by mistake?</span>
+                    <ConfirmSubmit
+                      className="btn btn-danger btn-small"
+                      confirm={`Remove this ${pounds(e.amount_pence)} cost${spread ? ` (from all ${e.covers_months} months)` : ""}?`}
+                    >
+                      Remove cost
+                    </ConfirmSubmit>
+                  </form>
+                </details>
               </li>
             );
           })}
@@ -355,7 +368,7 @@ export default async function AccountsPage({
       </details>
 
       <h2 className="section-title" style={{ marginTop: 28 }}>
-        Last 12 months
+        {tableRows.length < rows.length ? "Month by month" : "Last 12 months"}
       </h2>
       <div className="card" style={{ padding: 0, overflowX: "auto" }}>
         <table className="money-table">
@@ -368,7 +381,7 @@ export default async function AccountsPage({
             </tr>
           </thead>
           <tbody>
-            {[...rows].reverse().map((r) => {
+            {[...tableRows].reverse().map((r) => {
               const p = r.income - r.costs;
               return (
                 <tr key={r.month} className={r.month === month ? "on" : undefined}>

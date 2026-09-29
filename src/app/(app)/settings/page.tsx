@@ -2,13 +2,15 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getStaff } from "@/lib/staff";
 import { createClient } from "@/lib/supabase/server";
-import { WEEKDAYS, formatTime } from "@/lib/dates";
+import { WEEKDAYS, extraTitle, formatTime } from "@/lib/dates";
+import { pounds } from "@/lib/money";
 import {
   addGroup,
   addHelper,
   addPlan,
   addSlot,
   deleteSlot,
+  generateSessions,
   newJoinLink,
   removeHelper,
   renameGroup,
@@ -224,47 +226,52 @@ export default async function SettingsPage({
         </div>
       ) : (
         <ul className="list" style={{ marginBottom: 12 }}>
-          {slots.map((s) => (
-            <li key={s.id}>
-              <div className="row-main" style={{ minHeight: 60 }}>
-                <div className="grow">
-                  <div className="name">
-                    {WEEKDAYS[s.weekday - 1]}, {formatTime(s.start_time)}
+          {slots.map((s) => {
+            const label = `${WEEKDAYS[s.weekday - 1]}, ${formatTime(s.start_time)}`;
+            return (
+              <li key={s.id}>
+                {/* One line each; tap to change or remove it. */}
+                <details className="fold-row">
+                  <summary className="row-main">
+                    <div className="grow">
+                      <div className="name">{label}</div>
+                      {extraTitle(s.title) ? (
+                        <div className="sub">{s.title}</div>
+                      ) : null}
+                    </div>
+                    <span className="fold-edit">Edit</span>
+                  </summary>
+                  <div className="fold-body stack">
+                    <form action={updateSlot} className="stack">
+                      <input type="hidden" name="id" value={s.id} />
+                      <DayTimeFields prefix={`slot-${s.id}`} slot={s} />
+                      <p className="small muted">
+                        Upcoming sessions nobody has been marked at yet move
+                        too. If the day or time changes, their &ldquo;I&apos;m
+                        coming&rdquo; answers are cleared. Sessions you moved by
+                        hand stay as they are.
+                      </p>
+                      <SubmitButton
+                        className="btn btn-primary btn-block"
+                        pendingText="Saving…"
+                      >
+                        Save change
+                      </SubmitButton>
+                    </form>
+                    <form action={deleteSlot}>
+                      <input type="hidden" name="id" value={s.id} />
+                      <ConfirmSubmit
+                        className="btn btn-danger btn-block btn-small"
+                        confirm={`Remove ${label} from the weekly timetable? Its upcoming sessions that nobody has been marked at are removed too.`}
+                      >
+                        Remove from the timetable
+                      </ConfirmSubmit>
+                    </form>
                   </div>
-                  <div className="sub">{s.title}</div>
-                </div>
-                <form action={deleteSlot}>
-                  <input type="hidden" name="id" value={s.id} />
-                  <ConfirmSubmit
-                    className="btn btn-quiet btn-small"
-                    aria-label={`Remove ${WEEKDAYS[s.weekday - 1]} ${formatTime(s.start_time)}`}
-                    confirm={`Remove ${WEEKDAYS[s.weekday - 1]} ${formatTime(s.start_time)} from the weekly timetable? Its upcoming sessions that nobody has been marked at are removed too.`}
-                  >
-                    <Icon name="x" size={18} />
-                  </ConfirmSubmit>
-                </form>
-              </div>
-              <details className="details" style={{ margin: "0 14px 14px" }}>
-                <summary>Change day, time or name</summary>
-                <form action={updateSlot}>
-                  <input type="hidden" name="id" value={s.id} />
-                  <DayTimeFields prefix={`slot-${s.id}`} slot={s} />
-                  <p className="small muted" style={{ marginBottom: 12 }}>
-                    Upcoming sessions nobody has been marked at yet move too. If
-                    the day or time changes, their &ldquo;I&apos;m coming&rdquo;
-                    answers are cleared. Sessions you moved by hand stay as they
-                    are.
-                  </p>
-                  <SubmitButton
-                    className="btn btn-primary btn-block"
-                    pendingText="Saving…"
-                  >
-                    Save change
-                  </SubmitButton>
-                </form>
-              </details>
-            </li>
-          ))}
+                </details>
+              </li>
+            );
+          })}
         </ul>
       )}
 
@@ -282,6 +289,16 @@ export default async function SettingsPage({
           </SubmitButton>
         </form>
       </details>
+      {slots.length > 0 ? (
+        <form action={generateSessions} className="quiet-row">
+          <span className="small muted">
+            Sessions are made 3 weeks ahead every night.
+          </span>
+          <SubmitButton className="link-btn" pendingText="Checking…">
+            Check now
+          </SubmitButton>
+        </form>
+      ) : null}
 
       <h2 className="section-title" style={{ marginTop: 32 }}>
         Plans and prices
@@ -295,62 +312,86 @@ export default async function SettingsPage({
       </div>
 
       <div className="stack">
-        {active.map((p) => (
-          <div key={p.id} className="card stack">
-            <form action={savePlan} className="stack">
-              <input type="hidden" name="id" value={p.id} />
-              <div className="field">
-                <label htmlFor={`name-${p.id}`}>Name</label>
-                <input
-                  id={`name-${p.id}`}
-                  name="name"
-                  defaultValue={p.name}
-                  required
-                />
-              </div>
-              <div className="form-row">
-                <div className="field">
-                  <label htmlFor={`sessions-${p.id}`}>Sessions a week</label>
-                  <input
-                    id={`sessions-${p.id}`}
-                    name="sessions"
-                    type="number"
-                    min={1}
-                    max={7}
-                    defaultValue={p.sessions_per_week}
-                    required
-                  />
-                </div>
-                <div className="field">
-                  <label htmlFor={`price-${p.id}`}>Price a month (£)</label>
-                  <input
-                    id={`price-${p.id}`}
-                    name="price"
-                    inputMode="decimal"
-                    defaultValue={p.price_pence / 100}
-                    required
-                  />
-                </div>
-              </div>
-              <SubmitButton
-                className="btn btn-primary btn-block"
-                pendingText="Saving…"
-              >
-                Save changes
-              </SubmitButton>
-            </form>
-            <form action={setPlanActive}>
-              <input type="hidden" name="id" value={p.id} />
-              <input type="hidden" name="active" value="false" />
-              <SubmitButton
-                className="btn btn-quiet btn-block btn-small"
-                pendingText="Saving…"
-              >
-                Stop offering this plan
-              </SubmitButton>
-            </form>
-          </div>
-        ))}
+        {active.length > 0 ? (
+          <ul className="list">
+            {active.map((p) => (
+              <li key={p.id}>
+                <details className="fold-row">
+                  <summary className="row-main">
+                    <div className="grow">
+                      <div className="name">{p.name}</div>
+                      {/* Only when the name doesn't already say it. */}
+                      {p.name.trim().toLowerCase() !==
+                      `${p.sessions_per_week} a week` ? (
+                        <div className="sub">{p.sessions_per_week} a week</div>
+                      ) : null}
+                    </div>
+                    <div className="name">{pounds(p.price_pence)}</div>
+                    <span className="fold-edit">Edit</span>
+                  </summary>
+                  <div className="fold-body stack">
+                    <form action={savePlan} className="stack">
+                      <input type="hidden" name="id" value={p.id} />
+                      <div className="field">
+                        <label htmlFor={`name-${p.id}`}>Name</label>
+                        <input
+                          id={`name-${p.id}`}
+                          name="name"
+                          defaultValue={p.name}
+                          required
+                        />
+                      </div>
+                      <div className="form-row">
+                        <div className="field">
+                          <label htmlFor={`sessions-${p.id}`}>
+                            Sessions a week
+                          </label>
+                          <input
+                            id={`sessions-${p.id}`}
+                            name="sessions"
+                            type="number"
+                            min={1}
+                            max={7}
+                            defaultValue={p.sessions_per_week}
+                            required
+                          />
+                        </div>
+                        <div className="field">
+                          <label htmlFor={`price-${p.id}`}>
+                            Price a month (£)
+                          </label>
+                          <input
+                            id={`price-${p.id}`}
+                            name="price"
+                            inputMode="decimal"
+                            defaultValue={p.price_pence / 100}
+                            required
+                          />
+                        </div>
+                      </div>
+                      <SubmitButton
+                        className="btn btn-primary btn-block"
+                        pendingText="Saving…"
+                      >
+                        Save changes
+                      </SubmitButton>
+                    </form>
+                    <form action={setPlanActive}>
+                      <input type="hidden" name="id" value={p.id} />
+                      <input type="hidden" name="active" value="false" />
+                      <SubmitButton
+                        className="btn btn-quiet btn-block btn-small"
+                        pendingText="Saving…"
+                      >
+                        Stop offering this plan
+                      </SubmitButton>
+                    </form>
+                  </div>
+                </details>
+              </li>
+            ))}
+          </ul>
+        ) : null}
 
         <details className="details">
           <summary>
@@ -425,52 +466,60 @@ export default async function SettingsPage({
       <h2 className="section-title" style={{ marginTop: 32 }}>
         Groups
       </h2>
-      <div className="note" style={{ marginBottom: 12 }}>
-        <Icon name="users" />
-        <span>
-          Each group has its own timetable, plans, members and payments. Switch
-          between them with the menu at the top of the screen.
-        </span>
-      </div>
+      <p className="small muted" style={{ margin: "-4px 0 10px" }}>
+        {liveGroups.length > 1
+          ? "Each group has its own timetable, plans, members and payments. Switch between them with the menu at the top."
+          : "Running a second class somewhere else? Start a new group for it."}
+      </p>
       <ul className="list" style={{ marginBottom: 12 }}>
         {liveGroups.map((g) => (
           <li key={g.id}>
-            <form
-              action={renameGroup}
-              className="row-main"
-              style={{ gap: 8, minHeight: 64 }}
-            >
-              <input type="hidden" name="id" value={g.id} />
-              <label htmlFor={`group-${g.id}`} className="sr-only">
-                Group name
-              </label>
-              <input
-                id={`group-${g.id}`}
-                name="name"
-                defaultValue={g.name}
-                required
-                maxLength={60}
-                style={{ flex: 1 }}
-              />
-              <SubmitButton
-                className="btn btn-outline btn-small"
-                pendingText="…"
-              >
-                Save
-              </SubmitButton>
-            </form>
-            {liveGroups.length > 1 ? (
-              <form action={setGroupActive} style={{ padding: "0 14px 12px" }}>
-                <input type="hidden" name="id" value={g.id} />
-                <input type="hidden" name="active" value="false" />
-                <ConfirmSubmit
-                  className="btn btn-quiet btn-small"
-                  confirm={`Stop running ${g.name}? It's hidden and no new sessions are made. Its history is kept, and you can bring it back any time.`}
-                >
-                  Stop running this group
-                </ConfirmSubmit>
-              </form>
-            ) : null}
+            <details className="fold-row">
+              <summary className="row-main">
+                <div className="grow">
+                  <div className="name">{g.name}</div>
+                  {g.id === group.id && liveGroups.length > 1 ? (
+                    <div className="sub">Showing now</div>
+                  ) : null}
+                </div>
+                <span className="fold-edit">Rename</span>
+              </summary>
+              <div className="fold-body stack">
+                <form action={renameGroup} className="cluster" style={{ flexWrap: "nowrap" }}>
+                  <input type="hidden" name="id" value={g.id} />
+                  <label htmlFor={`group-${g.id}`} className="sr-only">
+                    Group name
+                  </label>
+                  <input
+                    id={`group-${g.id}`}
+                    name="name"
+                    defaultValue={g.name}
+                    required
+                    maxLength={60}
+                    style={{ flex: 1 }}
+                  />
+                  <SubmitButton className="btn btn-primary btn-small" pendingText="…">
+                    Save
+                  </SubmitButton>
+                </form>
+                <p className="small muted">
+                  The name shows on the join page and in your WhatsApp messages.
+                  The join link stays the same.
+                </p>
+                {liveGroups.length > 1 ? (
+                  <form action={setGroupActive}>
+                    <input type="hidden" name="id" value={g.id} />
+                    <input type="hidden" name="active" value="false" />
+                    <ConfirmSubmit
+                      className="btn btn-quiet btn-small btn-block"
+                      confirm={`Stop running ${g.name}? It's hidden and no new sessions are made. Its history is kept, and you can bring it back any time.`}
+                    >
+                      Stop running this group
+                    </ConfirmSubmit>
+                  </form>
+                ) : null}
+              </div>
+            </details>
           </li>
         ))}
       </ul>

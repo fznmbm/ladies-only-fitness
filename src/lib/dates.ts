@@ -87,6 +87,25 @@ export function monthName(iso: string): string {
   return new Intl.DateTimeFormat("en-GB", { timeZone: "UTC", month: "long" }).format(toDate(iso));
 }
 
+/** A date split up for a small calendar block: { dow: "Tue", day: "29", mon: "Sept" }. */
+export function dayParts(iso: string): { dow: string; day: string; mon: string } {
+  const d = toDate(iso);
+  const part = (o: Intl.DateTimeFormatOptions) =>
+    new Intl.DateTimeFormat("en-GB", { timeZone: "UTC", ...o }).format(d);
+  return {
+    dow: part({ weekday: "short" }),
+    day: part({ day: "numeric" }),
+    mon: part({ month: "short" }),
+  };
+}
+
+/** The usual session name. Only a different name is worth showing. */
+export const DEFAULT_SESSION_TITLE = "Workout session";
+export function extraTitle(title: string | null | undefined): string {
+  const t = (title ?? "").trim();
+  return t && t.toLowerCase() !== DEFAULT_SESSION_TITLE.toLowerCase() ? t : "";
+}
+
 /** "19:00:00" becomes "7:00 pm". */
 export function formatTime(t: string): string {
   const [h, m] = t.split(":").map(Number);

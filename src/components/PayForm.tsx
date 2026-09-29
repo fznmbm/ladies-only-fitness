@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, useState } from "react";
+import { useActionState, useEffect, useRef, useState } from "react";
 import { payForMonth } from "@/app/me/actions";
 import { shrinkImage } from "@/lib/shrinkImage";
 import { pounds } from "@/lib/money";
@@ -30,7 +30,13 @@ export function PayForm({
   payRef,
 }: Props) {
   const [state, action, pending] = useActionState(payForMonth, null);
-  const [fileName, setFileName] = useState<string | null>(null);
+  const [photo, setPhoto] = useState<{ name: string; url: string } | null>(null);
+  const [missing, setMissing] = useState(false);
+  const fileInput = useRef<HTMLInputElement>(null);
+  // Free the preview picture's memory when it changes or the form goes.
+  useEffect(() => () => {
+    if (photo) URL.revokeObjectURL(photo.url);
+  }, [photo]);
   const [groupId, setGroupId] = useState(groups[0]?.id ?? "");
   const groupPlans = plans.filter((p) => p.group_id === groupId);
 
@@ -51,9 +57,11 @@ export function PayForm({
       action={async (formData) => {
         // Shrink the photo on her phone first, so it uploads fast and fits.
         const receipt = formData.get("receipt");
-        if (receipt instanceof File && receipt.size > 0) {
-          formData.set("receipt", await shrinkImage(receipt));
+        if (!(receipt instanceof File) || receipt.size === 0) {
+          setMissing(true);
+          return;
         }
+        formData.set("receipt", await shrinkImage(receipt));
         action(formData);
       }}
       className="stack"
@@ -115,16 +123,51 @@ export function PayForm({
       </div>
 
       <div className="field">
-        <label htmlFor="receipt">Photo of your receipt</label>
+        <span className="label">Photo of your receipt</span>
+        {/* The real file box is hidden; the button below opens it. She can
+            pick a screenshot from her photos or take a picture. */}
         <input
+          ref={fileInput}
           id="receipt"
           name="receipt"
           type="file"
           accept="image/*"
-          required
-          onChange={(e) => setFileName(e.target.files?.[0]?.name ?? null)}
+          className="sr-only"
+          tabIndex={-1}
+          onChange={(e) => {
+            const file = e.target.files?.[0];
+            setMissing(false);
+            setPhoto(file ? { name: file.name, url: URL.createObjectURL(file) } : null);
+          }}
         />
-        {fileName ? <span className="small muted">{fileName}</span> : null}
+        {photo ? (
+          <div className="receipt-picked">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src={photo.url} alt="Your receipt" />
+            <span className="grow small">{photo.name}</span>
+            <button
+              type="button"
+              className="btn btn-quiet btn-small"
+              onClick={() => fileInput.current?.click()}
+            >
+              Change
+            </button>
+          </div>
+        ) : (
+          <button
+            type="button"
+            className={missing ? "receipt-pick missing" : "receipt-pick"}
+            onClick={() => fileInput.current?.click()}
+          >
+            <Icon name="upload" size={20} />
+            Add a photo or screenshot
+          </button>
+        )}
+        {missing ? (
+          <span className="small" role="alert" style={{ color: "var(--brick)" }}>
+            Please add a photo of your receipt first.
+          </span>
+        ) : null}
       </div>
 
       {state && "error" in state ? (

@@ -3,6 +3,8 @@ import { getMember } from "@/lib/memberAuth";
 import {
   addDays,
   addMonths,
+  dayParts,
+  extraTitle,
   formatDate,
   formatDay,
   formatMonth,
@@ -149,10 +151,11 @@ export default async function MePage() {
   );
   const nextWeek = twoWeeks.filter((s) => s.session_date >= nextWs);
 
-  // One session card with her "I'm coming" buttons. If she can't make it,
-  // it suggests the other sessions of the same group she can still come to
-  // that week. Cancelled sessions show why, with no buttons.
-  const sessionCard = (s: Session, sameWeek: Session[], weekWord: string) => {
+  // One session in her list: a small calendar block, the time, and her
+  // "I'm coming" switch. If she can't make it, it suggests the other sessions
+  // of the same group she can still come to that week. Cancelled sessions
+  // show why, with no buttons.
+  const sessionRow = (s: Session, sameWeek: Session[], weekWord: string) => {
     const mine = rsvpBySession.get(s.id);
     const state = mine === true ? "yes" : mine === false ? "no" : "none";
     const otherOptions = sameWeek.filter(
@@ -162,46 +165,49 @@ export default async function MePage() {
         o.group_id === s.group_id &&
         rsvpBySession.get(o.id) !== false,
     );
+    const d = dayParts(s.session_date);
+    const label = [
+      extraTitle(s.title),
+      manyGroups ? (nameOf.get(s.group_id) ?? "") : "",
+    ]
+      .filter(Boolean)
+      .join(", ");
     return (
-      <div
-        key={s.id}
-        className="card stack"
-        style={s.cancelled ? { opacity: 0.75 } : undefined}
-      >
-        <div
-          className="cluster"
-          style={{ alignItems: "center", gap: 12, flexWrap: "nowrap" }}
-        >
-          <span className="time">{formatTime(s.start_time)}</span>
-          <div className="grow">
-            <div className="name">{formatDay(s.session_date)}</div>
-            <div className="sub">
-              {s.title}
-              {manyGroups ? `, ${nameOf.get(s.group_id) ?? ""}` : ""}
-            </div>
-          </div>
-          {s.cancelled ? <span className="chip chip-warn">Cancelled</span> : null}
+      <li key={s.id} className={s.cancelled ? "ses cancelled" : "ses"}>
+        <div className="ses-date" aria-hidden="true">
+          <span>{d.dow}</span>
+          <b>{d.day}</b>
         </div>
-        {s.cancelled ? (
-          s.cancel_reason ? (
-            <p className="small muted">{s.cancel_reason}</p>
-          ) : null
-        ) : (
-          <>
-            <RsvpButtons sessionId={s.id} state={state} />
-            {state === "no" && otherOptions.length > 0 ? (
-              <div className="note">
-                <Icon name="clock" />
-                <span>
-                  You can still come{" "}
-                  {joinList(otherOptions.map((o) => formatDate(o.session_date)))}{" "}
-                  {weekWord}.
-                </span>
-              </div>
+        <div className="ses-main">
+          <div className="ses-head">
+            <span className="ses-time">{formatTime(s.start_time)}</span>
+            <span className="sr-only">{formatDay(s.session_date)}</span>
+            {label ? <span className="ses-label">{label}</span> : null}
+            {s.cancelled ? (
+              <span className="chip chip-warn">Cancelled</span>
             ) : null}
-          </>
-        )}
-      </div>
+          </div>
+          {s.cancelled ? (
+            s.cancel_reason ? (
+              <p className="small muted">{s.cancel_reason}</p>
+            ) : null
+          ) : (
+            <>
+              <RsvpButtons sessionId={s.id} state={state} />
+              {state === "no" && otherOptions.length > 0 ? (
+                <p className="ses-hint">
+                  <Icon name="clock" size={16} />
+                  <span>
+                    You can still come{" "}
+                    {joinList(otherOptions.map((o) => formatDate(o.session_date)))}{" "}
+                    {weekWord}.
+                  </span>
+                </p>
+              ) : null}
+            </>
+          )}
+        </div>
+      </li>
     );
   };
 
@@ -214,9 +220,21 @@ export default async function MePage() {
     { value: month, label: formatMonth(month) },
     { value: addMonths(month, 1), label: formatMonth(addMonths(month, 1)) },
   ];
-  // Paid for this month in every group already? Then offer next month first.
+  // Paid for this month in every group already? Then offer next month first,
+  // folded away behind one button so it doesn't fill her screen.
   const allPaid = groups.every((g) => thisMonthSub.has(g.id));
   const defaultPayMonth = allPaid ? addMonths(month, 1) : month;
+  const payForm =
+    plans.length > 0 ? (
+      <PayForm
+        plans={plans}
+        groups={groups.map((g) => ({ id: g.id, name: g.name }))}
+        bank={bank}
+        months={payMonths}
+        defaultMonth={defaultPayMonth}
+        payRef={member.pay_ref ?? member.name.split(" ")[0]}
+      />
+    ) : null;
 
   return (
     <>
@@ -264,23 +282,15 @@ export default async function MePage() {
         })}
       </div>
 
-      <div style={{ marginTop: 16 }}>
+      <div style={{ marginTop: 12 }}>
         <InstallHint />
       </div>
 
-      {plans.length > 0 ? (
+      {/* Not paid yet: the form comes first, open. */}
+      {payForm && !allPaid ? (
         <>
-          <h2 className="section-title">Renew or pay</h2>
-          <div className="card">
-            <PayForm
-              plans={plans}
-              groups={groups.map((g) => ({ id: g.id, name: g.name }))}
-              bank={bank}
-              months={payMonths}
-              defaultMonth={defaultPayMonth}
-              payRef={member.pay_ref ?? member.name.split(" ")[0]}
-            />
-          </div>
+          <h2 className="section-title">Pay for {monthName(month)}</h2>
+          <div className="card">{payForm}</div>
         </>
       ) : null}
 
@@ -292,21 +302,39 @@ export default async function MePage() {
       {thisWeek.length === 0 ? (
         <div className="card empty">No more sessions this week.</div>
       ) : (
-        <div className="stack">
-          {thisWeek.map((s) => sessionCard(s, thisWeek, "this week"))}
-        </div>
+        <ul className="list">
+          {thisWeek.map((s) => sessionRow(s, thisWeek, "this week"))}
+        </ul>
       )}
 
-      <h2 className="section-title">Next week</h2>
       {nextWeek.length === 0 ? (
-        <div className="card empty">
+        <p className="small muted" style={{ marginTop: 16 }}>
           Next week&apos;s sessions aren&apos;t up yet.
-        </div>
+        </p>
       ) : (
-        <div className="stack">
-          {nextWeek.map((s) => sessionCard(s, nextWeek, "next week"))}
-        </div>
+        <details className="details week-more">
+          <summary>
+            <span className="grow">Next week</span>
+            <span className="summary-note">
+              {nextWeek.filter((s) => !s.cancelled).length} sessions
+            </span>
+          </summary>
+          <ul className="list">
+            {nextWeek.map((s) => sessionRow(s, nextWeek, "next week"))}
+          </ul>
+        </details>
       )}
+
+      {/* Already paid: renewing is one tap away, folded up. */}
+      {payForm && allPaid ? (
+        <details className="details pay-more">
+          <summary>
+            <Icon name="wallet" size={18} />
+            <span className="grow">Pay for {monthName(defaultPayMonth)}</span>
+          </summary>
+          <div className="body">{payForm}</div>
+        </details>
+      ) : null}
 
       <p className="small muted" style={{ marginTop: 24, textAlign: "center" }}>
         <a href="/privacy">Your privacy</a>

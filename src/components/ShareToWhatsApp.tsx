@@ -34,8 +34,10 @@ type Props = {
   /** Her WhatsApp number, to open a chat with just her. Leave out to share to a group. */
   phone?: string | null;
   className?: string;
-  /** What the button says for a moment after it's tapped. */
+  /** What the button says for a moment after it's tapped. Empty: just a tick. */
   copiedLabel?: string;
+  /** For a button that shows only an icon: what a screen reader says. */
+  label?: string;
   children: ReactNode;
 };
 
@@ -50,6 +52,7 @@ export function ShareToWhatsApp({
   phone = null,
   className = "btn btn-primary btn-block",
   copiedLabel = "Copied. Paste it in WhatsApp",
+  label,
   children,
 }: Props) {
   const [copied, setCopied] = useState(false);
@@ -62,6 +65,8 @@ export function ShareToWhatsApp({
       target="_blank"
       rel="noopener noreferrer"
       className={className}
+      aria-label={label}
+      title={label}
       onClick={(e) => {
         const touch = window.matchMedia("(pointer: coarse)").matches;
         if (!direct && touch && typeof navigator.share === "function") {
@@ -78,7 +83,8 @@ export function ShareToWhatsApp({
     >
       {copied ? (
         <>
-          <Icon name="check" size={18} /> {copiedLabel}
+          <Icon name="check" size={18} />
+          {copiedLabel ? ` ${copiedLabel}` : null}
         </>
       ) : (
         children

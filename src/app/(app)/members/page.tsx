@@ -258,44 +258,47 @@ export default async function MembersPage({
               const last = lastCame.get(m.id);
               const owed = owes.get(m.id) ?? 0;
               const wa = whatsappUrl(m.phone, messageFor(m));
-              let planText = `Not paid for ${monthName(month)}`;
-              let planTone = "sub bad";
+              // One short line: her plan this month, then when she last came.
+              let planText = "Not paid";
+              let planTone = "bad";
               if (sub) {
-                planText = `${sub.sessions_per_week} a week, paid for ${monthName(month)}`;
-                planTone = "sub";
+                planText = `${sub.sessions_per_week} a week`;
+                planTone = "";
                 if (sub.status === "pending") {
                   planText += ", payment pending";
-                  planTone = "sub warn";
+                  planTone = "warn";
+                } else if (renewed.has(m.id)) {
+                  planText += `, ${monthName(nextMonth)} paid`;
                 }
-                if (renewed.has(m.id))
-                  planText += `, renewed for ${monthName(nextMonth)}`;
               }
               return (
                 <li key={m.id}>
-                  <div className="row-main">
-                    <Avatar name={m.name} />
-                    <Link href={`/members/${m.id}`} className="grow row-link">
-                      <div className="name">{m.name}</div>
-                      <div className={planTone}>{planText}</div>
-                      <div className="sub">
-                        {last
-                          ? `Last came ${formatDate(last)}`
-                          : "No visits yet"}
-                      </div>
-                      {owed > 0 ? (
-                        <div className="sub bad">
-                          Owes for {owed} {owed === 1 ? "session" : "sessions"}
-                        </div>
-                      ) : null}
+                  <div className="row-main member-row">
+                    <Link href={`/members/${m.id}`} className="member-link">
+                      <Avatar name={m.name} />
+                      <span className="grow">
+                        <span className="name">{m.name}</span>
+                        <span className="sub">
+                          <span className={planTone}>{planText}</span>
+                          <span aria-hidden="true">·</span>
+                          <span>
+                            {last ? `came ${formatDate(last)}` : "no visits yet"}
+                          </span>
+                        </span>
+                      </span>
                     </Link>
+                    {owed > 0 ? (
+                      <span className="chip chip-warn">Owes {owed}</span>
+                    ) : null}
                     {wa ? (
                       <ShareToWhatsApp
                         text={messageFor(m)}
                         phone={m.phone}
-                        className="btn btn-outline btn-small"
-                        copiedLabel="Copied"
+                        className="icon-btn"
+                        copiedLabel=""
+                        label={`Message ${m.name.split(" ")[0]} on WhatsApp`}
                       >
-                        <Icon name="send" size={18} /> Message
+                        <Icon name="send" size={18} />
                       </ShareToWhatsApp>
                     ) : null}
                   </div>

@@ -276,6 +276,102 @@ export default async function RegisterPage({
     ),
   ).length;
 
+  // One lady's row: her plan line, the Here button, and any decision to make.
+  const row = (m: Member) => {
+    const mine = attByMember.get(m.id) ?? [];
+    const here = mine.find((a) => a.session_id === id) ?? null;
+    const sub = subByMember.get(m.id) ?? null;
+    const line = planLine(sub, mine.length, here);
+    const needsDecision = !!here && !!here.flag && !here.resolution;
+    return (
+      <li key={m.id}>
+        <div className="row-main">
+          <Avatar name={m.name} />
+          <div className="grow">
+            <div className="name">{m.name}</div>
+            <div
+              className={
+                line.tone === "ok" ? "sub" : `sub ${line.tone}`
+              }
+            >
+              {line.text}
+            </div>
+          </div>
+          <form action={toggleHere}>
+            <Hidden name="sessionId" value={id} />
+            <Hidden name="memberId" value={m.id} />
+            <SubmitButton
+              className={here ? "btn btn-primary" : "btn btn-outline"}
+              disabled={locked && !here}
+              aria-pressed={!!here}
+              aria-label={
+                here
+                  ? `${m.name} is here. Tap to undo.`
+                  : `Mark ${m.name} as here`
+              }
+              pendingText="…"
+            >
+              {here ? <Icon name="check" size={18} /> : null}
+              Here
+            </SubmitButton>
+          </form>
+        </div>
+        {needsDecision && here ? (
+          <DoorBox
+            a={here}
+            member={m}
+            allowance={sub?.sessions_per_week ?? 0}
+            plans={plans}
+          />
+        ) : null}
+        {here && here.extra_paid_pence > 0 ? (
+          <details
+            className="details"
+            style={{ margin: "0 14px 14px" }}
+          >
+            <summary>Cash recorded by mistake?</summary>
+            <form action={undoHere}>
+              <Hidden name="attendanceId" value={here.id} />
+              <p className="small muted">
+                This removes {m.name.split(" ")[0]}&apos;s visit today.
+                Give her the {pounds(here.extra_paid_pence)} back.
+              </p>
+              <SubmitButton
+                className="btn btn-danger btn-block"
+                pendingText="Removing…"
+              >
+                Remove visit, refund {pounds(here.extra_paid_pence)}
+              </SubmitButton>
+            </form>
+          </details>
+        ) : null}
+      </li>
+    );
+  };
+
+  // The ladies who said they're coming first, then everyone else, then those
+  // who said they can't make it. Rows never jump about when tapped.
+  // While searching, it's one plain list.
+  const sections = term
+    ? [{ key: "all", title: "", list: shown }]
+    : [
+        {
+          key: "coming",
+          title: "Said she's coming",
+          list: shown.filter((m) => said.get(m.id) === true),
+        },
+        {
+          key: "others",
+          title: "Everyone else",
+          list: shown.filter((m) => !said.has(m.id)),
+        },
+        {
+          key: "cant",
+          title: "Said she can't make it",
+          list: shown.filter((m) => said.get(m.id) === false),
+        },
+      ];
+
   return (
     <>
       <Link href="/sessions" className="back" style={{ marginTop: 8 }}>
@@ -366,90 +462,24 @@ export default async function RegisterPage({
           </Link>
         </div>
       ) : (
-        <ul className="list">
-          {shown.map((m) => {
-            const mine = attByMember.get(m.id) ?? [];
-            const here = mine.find((a) => a.session_id === id) ?? null;
-            const sub = subByMember.get(m.id) ?? null;
-            const line = planLine(sub, mine.length, here);
-            const needsDecision = !!here && !!here.flag && !here.resolution;
-            return (
-              <li key={m.id}>
-                <div className="row-main">
-                  <Avatar name={m.name} />
-                  <div className="grow">
-                    <div className="name">{m.name}</div>
-                    <div
-                      className={
-                        line.tone === "ok" ? "sub" : `sub ${line.tone}`
-                      }
-                    >
-                      {line.text}
-                    </div>
-                    {!here && said.get(m.id) === true ? (
-                      <div className="sub">Said she&apos;s coming</div>
-                    ) : null}
-                    {!here && said.get(m.id) === false ? (
-                      <div className="sub muted">
-                        Said she can&apos;t make it
-                      </div>
-                    ) : null}
-                  </div>
-                  <form action={toggleHere}>
-                    <Hidden name="sessionId" value={id} />
-                    <Hidden name="memberId" value={m.id} />
-                    <SubmitButton
-                      className={here ? "btn btn-primary" : "btn btn-outline"}
-                      disabled={locked && !here}
-                      aria-pressed={!!here}
-                      aria-label={
-                        here
-                          ? `${m.name} is here. Tap to undo.`
-                          : `Mark ${m.name} as here`
-                      }
-                      pendingText="…"
-                    >
-                      {here ? <Icon name="check" size={18} /> : null}
-                      Here
-                    </SubmitButton>
-                  </form>
-                </div>
-                {needsDecision && here ? (
-                  <DoorBox
-                    a={here}
-                    member={m}
-                    allowance={sub?.sessions_per_week ?? 0}
-                    plans={plans}
-                  />
+        <>
+          {sections.map((sec) =>
+            sec.list.length > 0 ? (
+              <section key={sec.key} className="reg-section">
+                {sections.filter((x) => x.list.length > 0).length > 1 ? (
+                  <h2 className="reg-heading">
+                    {sec.title}
+                    <span>{sec.list.length}</span>
+                  </h2>
                 ) : null}
-                {here && here.extra_paid_pence > 0 ? (
-                  <details
-                    className="details"
-                    style={{ margin: "0 14px 14px" }}
-                  >
-                    <summary>Cash recorded by mistake?</summary>
-                    <form action={undoHere}>
-                      <Hidden name="attendanceId" value={here.id} />
-                      <p className="small muted">
-                        This removes {m.name.split(" ")[0]}&apos;s visit today.
-                        Give her the {pounds(here.extra_paid_pence)} back.
-                      </p>
-                      <SubmitButton
-                        className="btn btn-danger btn-block"
-                        pendingText="Removing…"
-                      >
-                        Remove visit, refund {pounds(here.extra_paid_pence)}
-                      </SubmitButton>
-                    </form>
-                  </details>
-                ) : null}
-              </li>
-            );
-          })}
+                <ul className="list">{sec.list.map(row)}</ul>
+              </section>
+            ) : null,
+          )}
           {shown.length === 0 ? (
-            <li className="empty">No one called &ldquo;{q}&rdquo;.</li>
+            <div className="card empty">No one called &ldquo;{q}&rdquo;.</div>
           ) : null}
-        </ul>
+        </>
       )}
 
       <div className="stack" style={{ marginTop: 20 }}>

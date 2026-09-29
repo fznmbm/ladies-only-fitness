@@ -22,6 +22,7 @@ export function InstallHint() {
   const [chromeIos, setChromeIos] = useState(false);
   const [inApp, setInApp] = useState(false);
   const [hidden, setHidden] = useState(false);
+  const [open, setOpen] = useState(false);
 
   useEffect(() => {
     const standalone =
@@ -49,29 +50,43 @@ export function InstallHint() {
     return () => window.removeEventListener("installready", sync);
   }, []);
 
-  if (installed) return null;
+  if (installed || hidden) return null;
 
+  const later = () => {
+    setHidden(true);
+    try {
+      localStorage.setItem(LATER_KEY, String(Date.now()));
+    } catch {
+      // Private browsing: it just shows again next time.
+    }
+  };
+
+  // Android Chrome: one tap installs it, so a slim bar with an Add button.
   if (event) {
     return (
-      <button
-        type="button"
-        className="btn btn-primary btn-block"
-        style={{ minHeight: 52 }}
-        onClick={async () => {
-          await event.prompt();
-          const { outcome } = await event.userChoice;
-          // Chrome only offers once per page load, so clear it either way.
-          (window as WithInstall).__installEvent = null;
-          setEvent(null);
-          if (outcome === "accepted") setInstalled(true);
-        }}
-      >
-        <Icon name="plus" /> Add to your home screen
-      </button>
+      <section className="install-bar" aria-label="Put LiveFit on your home screen">
+        <div className="install-row">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src="/icon-192.png" alt="" width={32} height={32} />
+          <span className="grow">Add LiveFit to your home screen</span>
+          <button
+            type="button"
+            className="btn btn-primary btn-small"
+            onClick={async () => {
+              await event.prompt();
+              const { outcome } = await event.userChoice;
+              // Chrome only offers once per page load, so clear it either way.
+              (window as WithInstall).__installEvent = null;
+              setEvent(null);
+              if (outcome === "accepted") setInstalled(true);
+            }}
+          >
+            <Icon name="plus" size={16} /> Add
+          </button>
+        </div>
+      </section>
     );
   }
-
-  if (hidden) return null;
 
   // iPhone: Apple doesn't allow an install button, so show exactly where to tap.
   // Chrome on iPhone has Share at the top; Safari has it at the bottom.
@@ -104,32 +119,37 @@ export function InstallHint() {
         </>,
       ];
 
+  // A slim bar; the steps open underneath only when she taps "How?".
   return (
-    <section className="install-card" aria-label="Put LiveFit on your home screen">
-      <div className="install-title">
+    <section className="install-bar" aria-label="Put LiveFit on your home screen">
+      <div className="install-row">
         {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img src="/icon-192.png" alt="" width={40} height={40} />
-        <strong>Put LiveFit on your home screen</strong>
+        <img src="/icon-192.png" alt="" width={32} height={32} />
+        <span className="grow">Add LiveFit to your home screen</span>
+        <button
+          type="button"
+          className="install-how"
+          aria-expanded={open}
+          onClick={() => setOpen(!open)}
+        >
+          {open ? "Hide" : "How?"}
+        </button>
+        <button
+          type="button"
+          className="install-close"
+          aria-label="Not now"
+          onClick={later}
+        >
+          <Icon name="x" size={16} />
+        </button>
       </div>
-      <ol>
-        {steps.map((step, i) => (
-          <li key={i}>{step}</li>
-        ))}
-      </ol>
-      <button
-        type="button"
-        className="install-later"
-        onClick={() => {
-          setHidden(true);
-          try {
-            localStorage.setItem(LATER_KEY, String(Date.now()));
-          } catch {
-            // Private browsing: it just shows again next time.
-          }
-        }}
-      >
-        Not now
-      </button>
+      {open ? (
+        <ol>
+          {steps.map((step, i) => (
+            <li key={i}>{step}</li>
+          ))}
+        </ol>
+      ) : null}
     </section>
   );
 }

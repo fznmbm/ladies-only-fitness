@@ -7,13 +7,21 @@ import { SubmitButton } from "@/components/SubmitButton";
 import type { Plan } from "@/lib/types";
 
 type Props = {
+  /** Pre-picks the lady, when coming from her page. */
+  defaultMemberId?: string;
   members: { id: string; name: string }[];
   plans: Plan[];
   months: { value: string; label: string }[];
   defaultMonth: string;
 };
 
-export function PaymentForm({ members, plans, months, defaultMonth }: Props) {
+export function PaymentForm({
+  defaultMemberId,
+  members,
+  plans,
+  months,
+  defaultMonth,
+}: Props) {
   const [planId, setPlanId] = useState(plans[0]?.id ?? "");
   const [amount, setAmount] = useState(
     plans[0] ? String(plans[0].price_pence / 100) : "",
@@ -29,7 +37,16 @@ export function PaymentForm({ members, plans, months, defaultMonth }: Props) {
     <form action={recordPayment} className="stack">
       <div className="field">
         <label htmlFor="memberId">Who paid</label>
-        <select id="memberId" name="memberId" required defaultValue="">
+        <select
+          id="memberId"
+          name="memberId"
+          required
+          defaultValue={
+            defaultMemberId && members.some((m) => m.id === defaultMemberId)
+              ? defaultMemberId
+              : ""
+          }
+        >
           <option value="" disabled>
             Choose a lady
           </option>

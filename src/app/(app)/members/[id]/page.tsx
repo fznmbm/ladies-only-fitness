@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
-import { formatDate, formatTime, monthName } from "@/lib/dates";
+import { formatDate, formatTime, monthName, monthStart, todayISO } from "@/lib/dates";
 import { pounds } from "@/lib/money";
 import { deleteMember, setMemberGroup, updateMember } from "@/app/actions";
 import { getGroupContext } from "@/lib/groups";
@@ -10,6 +10,7 @@ import { Icon } from "@/components/Icon";
 import { PageHead } from "@/components/PageHead";
 import { SubmitButton } from "@/components/SubmitButton";
 import { LoginLinkButton } from "@/components/LoginLink";
+import { ShareToWhatsApp } from "@/components/ShareToWhatsApp";
 import type { Member, Subscription } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
@@ -32,6 +33,7 @@ export default async function MemberPage({
     { data: attData },
     { data: groupRows },
     { groups },
+    { count: owesCount },
   ] = await Promise.all([
       supabase.from("members").select("*").eq("id", id).maybeSingle(),
       supabase
@@ -56,6 +58,11 @@ export default async function MemberPage({
         .select("group_id, status")
         .eq("member_id", id),
       getGroupContext(),
+      supabase
+        .from("attendance")
+        .select("id", { count: "exact", head: true })
+        .eq("member_id", id)
+        .eq("resolution", "pay_later"),
     ]);
   if (!memberRow) notFound();
   const member = memberRow as Member;
@@ -93,6 +100,13 @@ export default async function MemberPage({
     )
     .slice(0, 20);
 
+  // The summary at the top: this month's plan, last visit, anything owed.
+  const month = monthStart(todayISO());
+  const current = subs.find((s) => s.month === month) ?? null;
+  const lastVisit = visits[0]?.sessions.session_date ?? null;
+  const owed = owesCount ?? 0;
+  const first = member.name.split(" ")[0];
+
   return (
     <>
       <Link href="/members" className="back" style={{ marginTop: 8 }}>
@@ -100,7 +114,13 @@ export default async function MemberPage({
       </Link>
       <PageHead
         title={member.name}
-        sub={member.pay_ref ? `Payment reference ${member.pay_ref}` : undefined}
+        sub={[
+          member.phone,
+          member.pay_ref ? `ref ${member.pay_ref}` : null,
+          member.status === "inactive" ? "no longer attending" : null,
+        ]
+          .filter(Boolean)
+          .join(" · ")}
       />
 
       {error ? (
@@ -111,66 +131,71 @@ export default async function MemberPage({
         </div>
       ) : null}
 
-      {!isOrganiser ? (
-        <div className="card stack">
-          <div className="small muted">WhatsApp number</div>
-          <div className="name">{member.phone ?? "Not given"}</div>
+      <div className="stats">
+        <div className={current ? "stat" : "stat bad"}>
+          <span>{monthName(month)}</span>
+          <b>
+            {current
+              ? `${current.sessions_per_week} a week`
+              : "Not paid"}
+          </b>
+          {current?.status === "pending" ? <small>payment pending</small> : null}
         </div>
-      ) : (
-      <form action={updateMember} className="card stack">
-        <input type="hidden" name="id" value={member.id} />
-        <div className="field">
-          <label htmlFor="name">Name</label>
-          <input id="name" name="name" defaultValue={member.name} required />
+        <div className="stat">
+          <span>Last came</span>
+          <b>{lastVisit ? formatDate(lastVisit).replace(/^\w+ /, "") : "Not yet"}</b>
         </div>
-        <div className="field">
-          <label htmlFor="phone">WhatsApp number</label>
-          <input
-            id="phone"
-            name="phone"
-            type="tel"
-            inputMode="tel"
-            defaultValue={member.phone ?? ""}
-          />
+        <div className={owed > 0 ? "stat bad" : "stat"}>
+          <span>Owes</span>
+          <b>{owed > 0 ? `${owed} ${owed === 1 ? "visit" : "visits"}` : "Nothing"}</b>
         </div>
-        <div className="field">
-          <label htmlFor="status">Status</label>
-          <select id="status" name="status" defaultValue={member.status}>
-            <option value="active">Active</option>
-            <option value="inactive">No longer attending</option>
-          </select>
-        </div>
-        <div className="field">
-          <label htmlFor="notes">Notes for the organiser</label>
-          <textarea id="notes" name="notes" defaultValue={member.notes ?? ""} />
-        </div>
-        <SubmitButton
-          className="btn btn-primary btn-block"
-          pendingText="Saving…"
-        >
-          Save changes
-        </SubmitButton>
-      </form>
-      )}
+      </div>
 
-      {isOrganiser && member.status === "active" ? (
-        <>
-          <h2 className="section-title">Her personal link</h2>
-          <div className="card stack">
-            <p className="small muted">
-              She taps the link once and is signed in on her phone, with no
-              password. Making a new link stops her old one from working.
-            </p>
-            <LoginLinkButton
-              memberId={member.id}
-              label={
-                member.phone ? "Send her a link on WhatsApp" : "Make her a link"
-              }
-            />
-          </div>
-        </>
+      <div className="action-row">
+        {member.phone ? (
+          <ShareToWhatsApp
+            text={`Hi ${first}, `}
+            phone={member.phone}
+            className="btn btn-outline"
+            copiedLabel="Opening…"
+          >
+            <Icon name="send" size={18} /> Message
+          </ShareToWhatsApp>
+        ) : null}
+        {isOrganiser ? (
+          <Link href={`/payments?pay=${member.id}`} className="btn btn-outline">
+            <Icon name="wallet" size={18} /> Record payment
+          </Link>
+        ) : null}
+      </div>
+
+      {isOrganiser && member.notes ? (
+        <div className="note" style={{ marginTop: 12 }}>
+          <Icon name="clip" />
+          <span>{member.notes}</span>
+        </div>
       ) : null}
 
+      {isOrganiser && member.status === "active" ? (
+        <div className="card stack" style={{ marginTop: 12 }}>
+          <div>
+            <div className="name">Her personal link</div>
+            <p className="small muted" style={{ marginTop: 2 }}>
+              Signs her in on her phone with no password. A new link stops the
+              old one working.
+            </p>
+          </div>
+          <LoginLinkButton
+            memberId={member.id}
+            label={
+              member.phone ? "Send her a link on WhatsApp" : "Make her a link"
+            }
+          />
+        </div>
+      ) : null}
+
+      {manyGroups ? (
+      <>
       <h2 className="section-title">Groups</h2>
       <ul className="list">
         {liveGroups.map((g) => {
@@ -212,6 +237,8 @@ export default async function MemberPage({
           );
         })}
       </ul>
+      </>
+      ) : null}
 
       <h2 className="section-title">Payments</h2>
       {subs.length === 0 ? (
@@ -274,14 +301,53 @@ export default async function MemberPage({
       )}
 
       {isOrganiser ? (
-      <details className="details" style={{ marginTop: 28 }}>
+        <details className="details" style={{ marginTop: 28 }}>
+          <summary>
+            <Icon name="sliders" size={18} /> Edit her details
+          </summary>
+          <form action={updateMember}>
+            <input type="hidden" name="id" value={member.id} />
+            <div className="field">
+              <label htmlFor="name">Name</label>
+              <input id="name" name="name" defaultValue={member.name} required />
+            </div>
+            <div className="field">
+              <label htmlFor="phone">WhatsApp number</label>
+              <input
+                id="phone"
+                name="phone"
+                type="tel"
+                inputMode="tel"
+                defaultValue={member.phone ?? ""}
+              />
+            </div>
+            <div className="field">
+              <label htmlFor="status">Status</label>
+              <select id="status" name="status" defaultValue={member.status}>
+                <option value="active">Active</option>
+                <option value="inactive">No longer attending</option>
+              </select>
+            </div>
+            <div className="field">
+              <label htmlFor="notes">Notes for the organiser</label>
+              <textarea id="notes" name="notes" defaultValue={member.notes ?? ""} />
+            </div>
+            <SubmitButton className="btn btn-primary btn-block" pendingText="Saving…">
+              Save changes
+            </SubmitButton>
+          </form>
+        </details>
+      ) : null}
+
+      {isOrganiser ? (
+      <details className="details" style={{ marginTop: 12 }}>
         <summary>Delete this member</summary>
         <form action={deleteMember} className="stack">
           <input type="hidden" name="id" value={member.id} />
           <p className="small muted">
             This removes {member.name} completely: her payments, visits and
             receipt photos. It can&apos;t be undone. If she has just stopped
-            coming, set her to &ldquo;No longer attending&rdquo; above instead,
+            coming, set her to &ldquo;No longer attending&rdquo; under Edit her details instead,
             which keeps her history.
           </p>
           <label

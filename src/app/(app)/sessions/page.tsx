@@ -2,13 +2,14 @@ import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import {
   addDays,
+  extraTitle,
   formatDate,
   formatDay,
   formatTime,
   todayISO,
   weekStart,
 } from "@/lib/dates";
-import { addSession, generateSessions } from "@/app/actions";
+import { addSession } from "@/app/actions";
 import { PageHead } from "@/components/PageHead";
 import { Icon } from "@/components/Icon";
 import { SubmitButton } from "@/components/SubmitButton";
@@ -199,7 +200,8 @@ export default async function SessionsPage({
             </Link>
           ) : monday >= thisMonday ? (
             <p className="small muted">
-              Sessions are made 3 weeks ahead from the weekly timetable.
+              Sessions are made 3 weeks ahead from the weekly timetable (see
+              Settings).
             </p>
           ) : null}
         </div>
@@ -235,7 +237,9 @@ export default async function SessionsPage({
                       >
                         <span className="time">{formatTime(s.start_time)}</span>
                         <span className="grow">
-                          <span className="name">{s.title}</span>
+                          {extraTitle(s.title) ? (
+                            <span className="name">{s.title}</span>
+                          ) : null}
                           {s.cancelled && s.cancel_reason ? (
                             <span className="sub" style={{ display: "block" }}>
                               {s.cancel_reason}
@@ -268,16 +272,6 @@ export default async function SessionsPage({
       )}
 
       <div className="stack" style={{ marginTop: 28 }} hidden={!isOrganiser}>
-        {(slotCount ?? 0) > 0 ? (
-          <form action={generateSessions}>
-            <SubmitButton
-              className="btn btn-outline btn-block"
-              pendingText="Checking…"
-            >
-              <Icon name="plus" /> Make any missing sessions from the timetable
-            </SubmitButton>
-          </form>
-        ) : null}
         <details className="details">
           <summary>
             <Icon name="plus" /> Add a one-off session

@@ -20,9 +20,10 @@ export const dynamic = "force-dynamic";
 export default async function PaymentsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ month?: string; error?: string }>;
+  searchParams: Promise<{ month?: string; error?: string; pay?: string }>;
 }) {
-  const { month: m, error } = await searchParams;
+  // ?pay=<her id> comes from "Record payment" on a lady's page.
+  const { month: m, error, pay } = await searchParams;
   // Money and settings are for the organiser only.
   if ((await getStaff())?.role !== "organiser") redirect("/sessions");
 
@@ -111,7 +112,7 @@ export default async function PaymentsPage({
         </div>
       ) : null}
 
-      <details className="details" open={subs.length === 0 || !!error}>
+      <details className="details" open={subs.length === 0 || !!error || !!pay}>
         <summary>
           <Icon name="plus" /> Record a payment
         </summary>
@@ -123,6 +124,7 @@ export default async function PaymentsPage({
             </div>
           ) : (
             <PaymentForm
+              defaultMemberId={pay}
               members={members}
               plans={plans}
               months={months}
@@ -260,25 +262,33 @@ export default async function PaymentsPage({
           <h2 className="section-title">Confirmed</h2>
           <ul className="list">
             {confirmed.map((s) => (
-              <li key={s.id} className="row-main">
-                <div className="grow">
-                  <div className="name">{s.members?.name ?? "Unknown"}</div>
-                  <div className="sub">
-                    {s.sessions_per_week} a week,{" "}
-                    {s.method === "cash" ? "cash" : "bank transfer"}
-                  </div>
-                </div>
-                <div className="name">{pounds(s.price_pence)}</div>
-                <form action={voidPayment}>
-                  <input type="hidden" name="id" value={s.id} />
-                  <ConfirmSubmit
-                    className="btn btn-quiet btn-small"
-                    aria-label={`Remove payment from ${s.members?.name ?? "this lady"}`}
-                    confirm={`Remove ${s.members?.name ?? "this lady"}'s ${pounds(s.price_pence)} payment? She'll show as not paid for this month.`}
-                  >
-                    <Icon name="x" size={18} />
-                  </ConfirmSubmit>
-                </form>
+              <li key={s.id}>
+                {/* Tap a payment to see the option to remove it, so it
+                    can't be removed by a stray tap. */}
+                <details className="fold-row">
+                  <summary className="row-main">
+                    <div className="grow">
+                      <div className="name">{s.members?.name ?? "Unknown"}</div>
+                      <div className="sub">
+                        {s.sessions_per_week} a week,{" "}
+                        {s.method === "cash" ? "cash" : "bank transfer"}
+                      </div>
+                    </div>
+                    <div className="name">{pounds(s.price_pence)}</div>
+                  </summary>
+                  <form action={voidPayment} className="fold-body">
+                    <input type="hidden" name="id" value={s.id} />
+                    <span className="small muted grow">
+                      Recorded by mistake?
+                    </span>
+                    <ConfirmSubmit
+                      className="btn btn-danger btn-small"
+                      confirm={`Remove ${s.members?.name ?? "this lady"}'s ${pounds(s.price_pence)} payment? She'll show as not paid for this month.`}
+                    >
+                      Remove payment
+                    </ConfirmSubmit>
+                  </form>
+                </details>
               </li>
             ))}
           </ul>
