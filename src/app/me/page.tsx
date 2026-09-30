@@ -20,6 +20,7 @@ import { InstallHint } from "@/components/InstallHint";
 import { RsvpButtons } from "@/components/RsvpButtons";
 import { PayForm } from "@/components/PayForm";
 import { Icon } from "@/components/Icon";
+import { pounds } from "@/lib/money";
 import type { Plan, Rsvp, Session, Subscription } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
@@ -56,7 +57,7 @@ export default async function MePage() {
     await Promise.all([
       admin
         .from("member_groups")
-        .select("group_id, groups(id, name, sort, active)")
+        .select("group_id, groups(id, name, sort, active, dropin_pence)")
         .eq("member_id", member.id)
         .eq("status", "active"),
       admin
@@ -84,8 +85,15 @@ export default async function MePage() {
   )
     .map((r) => r.groups)
     .filter(
-      (g): g is { id: string; name: string; sort: number; active: boolean } =>
-        !!g && g.active,
+      (
+        g,
+      ): g is {
+        id: string;
+        name: string;
+        sort: number;
+        active: boolean;
+        dropin_pence: number | null;
+      } => !!g && g.active,
     )
     .sort((a, b) => a.sort - b.sort || a.name.localeCompare(b.name));
   const groupIds = groups.map((g) => g.id);
@@ -192,7 +200,8 @@ export default async function MePage() {
         `You've said you're coming to ${total} ${manyGroups ? `${g.name} ` : ""}sessions ${weekWord}` +
           `${done > 0 ? ` (${done} already done)` : ""}. ` +
           `Your plan covers ${sub.sessions_per_week} a week, so ` +
-          `${extra === 1 ? "the extra session is" : `the ${extra} extra sessions are`} paid on the day.`,
+          `${extra === 1 ? "the extra session is" : `the ${extra} extra sessions are`} paid on the day` +
+          `${g.dropin_pence ? ` (${pounds(g.dropin_pence)} each)` : ""}.`,
       ];
     });
   const thisWeekNotes = overPlanNotes(
@@ -311,6 +320,9 @@ export default async function MePage() {
                 You don&apos;t have a {manyGroups ? `${g.name} ` : ""}plan for{" "}
                 {monthName(month)} yet. Pay by bank transfer, or give cash to
                 the organiser at a session.
+                {g.dropin_pence
+                  ? ` Just coming once? It's ${pounds(g.dropin_pence)} for a single session, paid on the day.`
+                  : ""}
               </div>
             );
           }

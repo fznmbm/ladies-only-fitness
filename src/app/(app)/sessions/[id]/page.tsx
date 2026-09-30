@@ -45,16 +45,43 @@ function Hidden({ name, value }: { name: string; value: string }) {
   return <input type="hidden" name={name} value={value} />;
 }
 
+/** "Record cash" with the amount typed in, pre-filled with the single session price. */
+function CashAmount({ a, dropin }: { a: Attendance; dropin: number | null }) {
+  return (
+    <form action={cashExtra}>
+      <Hidden name="attendanceId" value={a.id} />
+      <input
+        name="amount"
+        inputMode="decimal"
+        placeholder="£ cash received"
+        aria-label="Cash received in pounds"
+        defaultValue={dropin !== null ? dropin / 100 : undefined}
+        required
+      />
+      <SubmitButton
+        className="btn btn-primary"
+        style={{ flexShrink: 0 }}
+        pendingText="Saving…"
+      >
+        Record cash
+      </SubmitButton>
+    </form>
+  );
+}
+
 function DoorBox({
   a,
   member,
   allowance,
   plans,
+  dropin,
 }: {
   a: Attendance;
   member: Member;
   allowance: number;
   plans: Plan[];
+  /** Price of one session on its own, from Settings. */
+  dropin: number | null;
 }) {
   const first = member.name.split(" ")[0];
 
@@ -74,23 +101,7 @@ function DoorBox({
             Allow this time
           </SubmitButton>
         </form>
-        <form action={cashExtra}>
-          <Hidden name="attendanceId" value={a.id} />
-          <input
-            name="amount"
-            inputMode="decimal"
-            placeholder="£ cash received"
-            aria-label="Cash received in pounds"
-            required
-          />
-          <SubmitButton
-            className="btn btn-primary"
-            style={{ flexShrink: 0 }}
-            pendingText="Saving…"
-          >
-            Record cash
-          </SubmitButton>
-        </form>
+        <CashAmount a={a} dropin={dropin} />
         <form action={undoHere}>
           <Hidden name="attendanceId" value={a.id} />
           <SubmitButton
@@ -106,9 +117,28 @@ function DoorBox({
 
   return (
     <div className="door">
-      <p className="door-title">
-        {first} has no plan this month. Record cash for:
-      </p>
+      <p className="door-title">{first} has no plan this month.</p>
+      {/* Just today: one session paid on its own. */}
+      {dropin !== null ? (
+        <form action={cashExtra}>
+          <Hidden name="attendanceId" value={a.id} />
+          <Hidden name="amount" value={String(dropin / 100)} />
+          <SubmitButton
+            className="btn btn-primary btn-block"
+            pendingText="Saving…"
+          >
+            Just this session, {pounds(dropin)}
+          </SubmitButton>
+        </form>
+      ) : (
+        <>
+          <p className="door-sub">Just this session:</p>
+          <CashAmount a={a} dropin={null} />
+        </>
+      )}
+      {plans.length > 0 ? (
+        <p className="door-sub">Or a plan for the month:</p>
+      ) : null}
       {plans.map((p) => (
         <form key={p.id} action={cashPlan}>
           <Hidden name="attendanceId" value={a.id} />
@@ -116,7 +146,7 @@ function DoorBox({
           <Hidden name="memberId" value={member.id} />
           <Hidden name="planId" value={p.id} />
           <SubmitButton
-            className="btn btn-primary btn-block"
+            className="btn btn-outline btn-block"
             pendingText="Saving…"
           >
             {p.name}, {pounds(p.price_pence)}
@@ -173,7 +203,9 @@ export default async function RegisterPage({
   const isOrganiser = staff?.role === "organiser";
   if (!sessionRow) notFound();
   const session = sessionRow as Session;
-  const groupNameOf = groups.find((g) => g.id === session.group_id)?.name ?? "";
+  const sessionGroup = groups.find((g) => g.id === session.group_id);
+  const groupNameOf = sessionGroup?.name ?? "";
+  const dropin = sessionGroup?.dropin_pence ?? null;
 
   // Ladies can only be marked here on the day or afterwards (to correct it),
   // never in advance, and never for a cancelled session.
@@ -289,11 +321,7 @@ export default async function RegisterPage({
           <Avatar name={m.name} />
           <div className="grow">
             <div className="name">{m.name}</div>
-            <div
-              className={
-                line.tone === "ok" ? "sub" : `sub ${line.tone}`
-              }
-            >
+            <div className={line.tone === "ok" ? "sub" : `sub ${line.tone}`}>
               {line.text}
             </div>
           </div>
@@ -322,19 +350,17 @@ export default async function RegisterPage({
             member={m}
             allowance={sub?.sessions_per_week ?? 0}
             plans={plans}
+            dropin={dropin}
           />
         ) : null}
         {here && here.extra_paid_pence > 0 ? (
-          <details
-            className="details"
-            style={{ margin: "0 14px 14px" }}
-          >
+          <details className="details" style={{ margin: "0 14px 14px" }}>
             <summary>Cash recorded by mistake?</summary>
             <form action={undoHere}>
               <Hidden name="attendanceId" value={here.id} />
               <p className="small muted">
-                This removes {m.name.split(" ")[0]}&apos;s visit today.
-                Give her the {pounds(here.extra_paid_pence)} back.
+                This removes {m.name.split(" ")[0]}&apos;s visit today. Give her
+                the {pounds(here.extra_paid_pence)} back.
               </p>
               <SubmitButton
                 className="btn btn-danger btn-block"
@@ -408,7 +434,11 @@ export default async function RegisterPage({
           </div>
           <div
             className="card"
-            style={{ background: "var(--sand)", whiteSpace: "pre-line", fontSize: 14 }}
+            style={{
+              background: "var(--sand)",
+              whiteSpace: "pre-line",
+              fontSize: 14,
+            }}
           >
             {changeMessage}
           </div>
@@ -543,12 +573,16 @@ export default async function RegisterPage({
               </div>
               <div className="field">
                 <label htmlFor="move-title">Name</label>
-                <input id="move-title" name="title" defaultValue={session.title} />
+                <input
+                  id="move-title"
+                  name="title"
+                  defaultValue={session.title}
+                />
               </div>
               <p className="small muted">
                 Only this one session changes. If the date or time changes, the
-                ladies&apos; &ldquo;I&apos;m coming&rdquo; answers are cleared and
-                you&apos;ll get a message to send to the group.
+                ladies&apos; &ldquo;I&apos;m coming&rdquo; answers are cleared
+                and you&apos;ll get a message to send to the group.
               </p>
               <SubmitButton
                 className="btn btn-primary btn-block"
@@ -587,8 +621,8 @@ export default async function RegisterPage({
                 />
               </div>
               <p className="small muted">
-                The ladies will see it as cancelled, with the reason. You&apos;ll
-                get a message to send to the group.
+                The ladies will see it as cancelled, with the reason.
+                You&apos;ll get a message to send to the group.
               </p>
               <ConfirmSubmit
                 className="btn btn-danger btn-block"

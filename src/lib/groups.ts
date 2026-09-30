@@ -15,7 +15,7 @@ export const getGroupContext = cache(async () => {
   const supabase = await createClient();
   const { data } = await supabase
     .from("groups")
-    .select("id, name, sort, active, join_slug")
+    .select("id, name, sort, active, join_slug, dropin_pence")
     .order("sort")
     .order("created_at");
   const groups = (data ?? []) as Group[];

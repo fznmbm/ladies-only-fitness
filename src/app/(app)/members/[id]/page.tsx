@@ -1,9 +1,20 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
-import { formatDate, formatTime, monthName, monthStart, todayISO } from "@/lib/dates";
+import {
+  formatDate,
+  formatTime,
+  monthName,
+  monthStart,
+  todayISO,
+} from "@/lib/dates";
 import { pounds } from "@/lib/money";
-import { deleteMember, setMemberGroup, updateMember } from "@/app/actions";
+import {
+  deleteMember,
+  payForVisit,
+  setMemberGroup,
+  updateMember,
+} from "@/app/actions";
 import { getGroupContext } from "@/lib/groups";
 import { getStaff } from "@/lib/staff";
 import { Icon } from "@/components/Icon";
@@ -35,35 +46,35 @@ export default async function MemberPage({
     { groups },
     { count: owesCount },
   ] = await Promise.all([
-      supabase.from("members").select("*").eq("id", id).maybeSingle(),
-      supabase
-        .from("subscriptions")
-        .select("*, groups(name)")
-        .eq("member_id", id)
-        .neq("status", "rejected")
-        .order("month", { ascending: false })
-        .limit(12),
-      supabase
-        .from("attendance")
-        .select(
-          "id, flag, resolution, extra_paid_pence, sessions(session_date, start_time, groups(name))",
-        )
-        .eq("member_id", id)
-        // Newest first in the database, so the 20 shown really are the latest.
-        .order("sessions(session_date)", { ascending: false })
-        .order("sessions(start_time)", { ascending: false })
-        .limit(20),
-      supabase
-        .from("member_groups")
-        .select("group_id, status")
-        .eq("member_id", id),
-      getGroupContext(),
-      supabase
-        .from("attendance")
-        .select("id", { count: "exact", head: true })
-        .eq("member_id", id)
-        .eq("resolution", "pay_later"),
-    ]);
+    supabase.from("members").select("*").eq("id", id).maybeSingle(),
+    supabase
+      .from("subscriptions")
+      .select("*, groups(name)")
+      .eq("member_id", id)
+      .neq("status", "rejected")
+      .order("month", { ascending: false })
+      .limit(12),
+    supabase
+      .from("attendance")
+      .select(
+        "id, flag, resolution, extra_paid_pence, sessions(session_date, start_time, group_id, groups(name))",
+      )
+      .eq("member_id", id)
+      // Newest first in the database, so the 20 shown really are the latest.
+      .order("sessions(session_date)", { ascending: false })
+      .order("sessions(start_time)", { ascending: false })
+      .limit(20),
+    supabase
+      .from("member_groups")
+      .select("group_id, status")
+      .eq("member_id", id),
+    getGroupContext(),
+    supabase
+      .from("attendance")
+      .select("id", { count: "exact", head: true })
+      .eq("member_id", id)
+      .eq("resolution", "pay_later"),
+  ]);
   if (!memberRow) notFound();
   const member = memberRow as Member;
   // Helpers can look up a lady at the door; only the organiser changes her details.
@@ -89,6 +100,7 @@ export default async function MemberPage({
       sessions: {
         session_date: string;
         start_time: string;
+        group_id: string;
         groups: { name: string } | null;
       };
     }[]
@@ -134,20 +146,24 @@ export default async function MemberPage({
       <div className="stats">
         <div className={current ? "stat" : "stat bad"}>
           <span>{monthName(month)}</span>
-          <b>
-            {current
-              ? `${current.sessions_per_week} a week`
-              : "Not paid"}
-          </b>
-          {current?.status === "pending" ? <small>payment pending</small> : null}
+          <b>{current ? `${current.sessions_per_week} a week` : "Not paid"}</b>
+          {current?.status === "pending" ? (
+            <small>payment pending</small>
+          ) : null}
         </div>
         <div className="stat">
           <span>Last came</span>
-          <b>{lastVisit ? formatDate(lastVisit).replace(/^\w+ /, "") : "Not yet"}</b>
+          <b>
+            {lastVisit ? formatDate(lastVisit).replace(/^\w+ /, "") : "Not yet"}
+          </b>
         </div>
         <div className={owed > 0 ? "stat bad" : "stat"}>
           <span>Owes</span>
-          <b>{owed > 0 ? `${owed} ${owed === 1 ? "visit" : "visits"}` : "Nothing"}</b>
+          <b>
+            {owed > 0
+              ? `${owed} ${owed === 1 ? "visit" : "visits"}`
+              : "Nothing"}
+          </b>
         </div>
       </div>
 
@@ -195,49 +211,49 @@ export default async function MemberPage({
       ) : null}
 
       {manyGroups ? (
-      <>
-      <h2 className="section-title">Groups</h2>
-      <ul className="list">
-        {liveGroups.map((g) => {
-          const status = inGroup.get(g.id);
-          return (
-            <li key={g.id} className="row-main" style={{ minHeight: 60 }}>
-              <div className="grow">
-                <div className="name">{g.name}</div>
-                <div className="sub">
-                  {status === "active"
-                    ? "Member"
-                    : status === "pending"
-                      ? "Asked to join, see Members"
-                      : "Not in this group"}
-                </div>
-              </div>
-              {isOrganiser ? (
-              <form action={setMemberGroup}>
-                <input type="hidden" name="memberId" value={member.id} />
-                <input type="hidden" name="groupId" value={g.id} />
-                <input
-                  type="hidden"
-                  name="in"
-                  value={status === "active" ? "false" : "true"}
-                />
-                <SubmitButton
-                  className={
-                    status === "active"
-                      ? "btn btn-quiet btn-small"
-                      : "btn btn-outline btn-small"
-                  }
-                  pendingText="…"
-                >
-                  {status === "active" ? "Remove" : "Add"}
-                </SubmitButton>
-              </form>
-              ) : null}
-            </li>
-          );
-        })}
-      </ul>
-      </>
+        <>
+          <h2 className="section-title">Groups</h2>
+          <ul className="list">
+            {liveGroups.map((g) => {
+              const status = inGroup.get(g.id);
+              return (
+                <li key={g.id} className="row-main" style={{ minHeight: 60 }}>
+                  <div className="grow">
+                    <div className="name">{g.name}</div>
+                    <div className="sub">
+                      {status === "active"
+                        ? "Member"
+                        : status === "pending"
+                          ? "Asked to join, see Members"
+                          : "Not in this group"}
+                    </div>
+                  </div>
+                  {isOrganiser ? (
+                    <form action={setMemberGroup}>
+                      <input type="hidden" name="memberId" value={member.id} />
+                      <input type="hidden" name="groupId" value={g.id} />
+                      <input
+                        type="hidden"
+                        name="in"
+                        value={status === "active" ? "false" : "true"}
+                      />
+                      <SubmitButton
+                        className={
+                          status === "active"
+                            ? "btn btn-quiet btn-small"
+                            : "btn btn-outline btn-small"
+                        }
+                        pendingText="…"
+                      >
+                        {status === "active" ? "Remove" : "Add"}
+                      </SubmitButton>
+                    </form>
+                  ) : null}
+                </li>
+              );
+            })}
+          </ul>
+        </>
       ) : null}
 
       <h2 className="section-title">Payments</h2>
@@ -286,13 +302,45 @@ export default async function MemberPage({
                       : v.resolution === "cash"
                         ? v.flag === "over_plan"
                           ? `Over her plan, paid ${pounds(v.extra_paid_pence)} cash`
-                          : "No plan, paid cash"
+                          : v.extra_paid_pence > 0
+                            ? `No plan, paid ${pounds(v.extra_paid_pence)} for the session`
+                            : "No plan, bought a plan at the door"
                         : v.resolution === "pay_later"
                           ? "Pays later"
                           : v.resolution === "settled"
                             ? "Paid later"
                             : "Needs a decision"}
                   </div>
+                ) : null}
+                {v.resolution === "pay_later" ? (
+                  // She paid for it afterwards: record the cash here.
+                  <form
+                    action={payForVisit}
+                    className="cluster"
+                    style={{ marginTop: 8, flexWrap: "nowrap" }}
+                  >
+                    <input type="hidden" name="attendanceId" value={v.id} />
+                    <input
+                      name="amount"
+                      inputMode="decimal"
+                      placeholder="£ paid"
+                      aria-label="Amount paid in pounds"
+                      defaultValue={(() => {
+                        const d = groups.find(
+                          (g) => g.id === v.sessions.group_id,
+                        )?.dropin_pence;
+                        return d != null ? d / 100 : undefined;
+                      })()}
+                      required
+                      style={{ minHeight: 40, maxWidth: 110 }}
+                    />
+                    <SubmitButton
+                      className="btn btn-outline btn-small"
+                      pendingText="Saving…"
+                    >
+                      She&apos;s paid
+                    </SubmitButton>
+                  </form>
                 ) : null}
               </div>
             </li>
@@ -309,7 +357,12 @@ export default async function MemberPage({
             <input type="hidden" name="id" value={member.id} />
             <div className="field">
               <label htmlFor="name">Name</label>
-              <input id="name" name="name" defaultValue={member.name} required />
+              <input
+                id="name"
+                name="name"
+                defaultValue={member.name}
+                required
+              />
             </div>
             <div className="field">
               <label htmlFor="phone">WhatsApp number</label>
@@ -330,9 +383,16 @@ export default async function MemberPage({
             </div>
             <div className="field">
               <label htmlFor="notes">Notes for the organiser</label>
-              <textarea id="notes" name="notes" defaultValue={member.notes ?? ""} />
+              <textarea
+                id="notes"
+                name="notes"
+                defaultValue={member.notes ?? ""}
+              />
             </div>
-            <SubmitButton className="btn btn-primary btn-block" pendingText="Saving…">
+            <SubmitButton
+              className="btn btn-primary btn-block"
+              pendingText="Saving…"
+            >
               Save changes
             </SubmitButton>
           </form>
@@ -340,31 +400,31 @@ export default async function MemberPage({
       ) : null}
 
       {isOrganiser ? (
-      <details className="details" style={{ marginTop: 12 }}>
-        <summary>Delete this member</summary>
-        <form action={deleteMember} className="stack">
-          <input type="hidden" name="id" value={member.id} />
-          <p className="small muted">
-            This removes {member.name} completely: her payments, visits and
-            receipt photos. It can&apos;t be undone. If she has just stopped
-            coming, set her to &ldquo;No longer attending&rdquo; under Edit her details instead,
-            which keeps her history.
-          </p>
-          <label
-            className="cluster"
-            style={{ alignItems: "center", flexWrap: "nowrap" }}
-          >
-            <input type="checkbox" name="confirm" value="yes" required />
-            <span>Yes, delete {member.name} for good</span>
-          </label>
-          <SubmitButton
-            className="btn btn-danger btn-block"
-            pendingText="Deleting…"
-          >
-            Delete member
-          </SubmitButton>
-        </form>
-      </details>
+        <details className="details" style={{ marginTop: 12 }}>
+          <summary>Delete this member</summary>
+          <form action={deleteMember} className="stack">
+            <input type="hidden" name="id" value={member.id} />
+            <p className="small muted">
+              This removes {member.name} completely: her payments, visits and
+              receipt photos. It can&apos;t be undone. If she has just stopped
+              coming, set her to &ldquo;No longer attending&rdquo; under Edit
+              her details instead, which keeps her history.
+            </p>
+            <label
+              className="cluster"
+              style={{ alignItems: "center", flexWrap: "nowrap" }}
+            >
+              <input type="checkbox" name="confirm" value="yes" required />
+              <span>Yes, delete {member.name} for good</span>
+            </label>
+            <SubmitButton
+              className="btn btn-danger btn-block"
+              pendingText="Deleting…"
+            >
+              Delete member
+            </SubmitButton>
+          </form>
+        </details>
       ) : null}
     </>
   );

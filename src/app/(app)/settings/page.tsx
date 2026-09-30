@@ -11,6 +11,7 @@ import {
   addSlot,
   deleteSlot,
   generateSessions,
+  saveDropin,
   newJoinLink,
   removeHelper,
   renameGroup,
@@ -393,6 +394,57 @@ export default async function SettingsPage({
           </ul>
         ) : null}
 
+        {/* One session on its own, for ladies without a plan. */}
+        <ul className="list">
+          <li>
+            <details className="fold-row">
+              <summary className="row-main">
+                <div className="grow">
+                  <div className="name">Single session</div>
+                  <div className="sub">
+                    For a lady without a plan who pays for one session
+                  </div>
+                </div>
+                <div className="name">
+                  {group.dropin_pence !== null
+                    ? pounds(group.dropin_pence)
+                    : "Not set"}
+                </div>
+                <span className="fold-edit">Edit</span>
+              </summary>
+              <form action={saveDropin} className="fold-body stack">
+                <input type="hidden" name="groupId" value={group.id} />
+                <div className="field">
+                  <label htmlFor="dropin-price">
+                    Price for one session (£)
+                  </label>
+                  <input
+                    id="dropin-price"
+                    name="price"
+                    inputMode="decimal"
+                    placeholder="e.g. 8"
+                    defaultValue={
+                      group.dropin_pence !== null
+                        ? group.dropin_pence / 100
+                        : ""
+                    }
+                  />
+                </div>
+                <p className="small muted">
+                  It appears as a one-tap button at the door, and ladies see it
+                  on their page. Leave it empty to type the amount each time.
+                </p>
+                <SubmitButton
+                  className="btn btn-primary btn-block"
+                  pendingText="Saving…"
+                >
+                  Save price
+                </SubmitButton>
+              </form>
+            </details>
+          </li>
+        </ul>
+
         <details className="details">
           <summary>
             <Icon name="plus" /> Add a plan
@@ -485,7 +537,11 @@ export default async function SettingsPage({
                 <span className="fold-edit">Rename</span>
               </summary>
               <div className="fold-body stack">
-                <form action={renameGroup} className="cluster" style={{ flexWrap: "nowrap" }}>
+                <form
+                  action={renameGroup}
+                  className="cluster"
+                  style={{ flexWrap: "nowrap" }}
+                >
                   <input type="hidden" name="id" value={g.id} />
                   <label htmlFor={`group-${g.id}`} className="sr-only">
                     Group name
@@ -498,7 +554,10 @@ export default async function SettingsPage({
                     maxLength={60}
                     style={{ flex: 1 }}
                   />
-                  <SubmitButton className="btn btn-primary btn-small" pendingText="…">
+                  <SubmitButton
+                    className="btn btn-primary btn-small"
+                    pendingText="…"
+                  >
                     Save
                   </SubmitButton>
                 </form>

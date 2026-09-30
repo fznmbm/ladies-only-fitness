@@ -621,6 +621,12 @@ input[type="checkbox"] {
   color: var(--brick);
   font-size: 14px;
 }
+.door-sub {
+  margin: 4px 0 0;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--brick);
+}
 .door form {
   display: flex;
   gap: 8px;

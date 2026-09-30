@@ -5,6 +5,8 @@ export type Group = {
   active: boolean;
   /** The end of the short join link, e.g. "livefitclub-7a3f" in /join/livefitclub-7a3f. */
   join_slug: string | null;
+  /** Price of one session on its own (a drop-in), in pence. Empty = not set. */
+  dropin_pence: number | null;
 };
 
 export type MemberGroup = {

@@ -392,6 +392,33 @@ export async function cashExtra(formData: FormData) {
   refresh();
 }
 
+/** A "pay later" visit paid off on its own (e.g. a lady who came once). */
+export async function payForVisit(formData: FormData) {
+  const supabase = await createClient();
+  const amount = toPence(str(formData, "amount"));
+  if (amount <= 0) return;
+  const { data, error } = await supabase
+    .from("attendance")
+    .update({ resolution: "cash", extra_paid_pence: amount })
+    .eq("id", str(formData, "attendanceId"))
+    .eq("resolution", "pay_later")
+    .select("members(name), sessions(session_date, group_id)")
+    .maybeSingle();
+  check(error);
+  const row = data as unknown as {
+    members: { name: string } | null;
+    sessions: { session_date: string; group_id: string } | null;
+  } | null;
+  if (row)
+    await logActivity(
+      supabase,
+      "Paid for a session later",
+      `${row.members?.name ?? "A lady"}, ${pounds(amount)} for ${row.sessions?.session_date ?? ""}`,
+      row.sessions?.group_id ?? null,
+    );
+  refresh();
+}
+
 export async function payLater(formData: FormData) {
   const supabase = await createClient();
   const { error } = await supabase
@@ -766,6 +793,27 @@ export async function savePlan(formData: FormData) {
       `${saved.name}: ${saved.sessions_per_week} a week, ${pounds(saved.price_pence)} a month`,
       saved.group_id,
     );
+  refresh();
+}
+
+/** The price of one session on its own for a group. Empty clears it. */
+export async function saveDropin(formData: FormData) {
+  await requireOrganiser();
+  const supabase = await createClient();
+  const raw = str(formData, "price");
+  const groupId = str(formData, "groupId");
+  const dropin = raw === "" ? null : toPence(raw);
+  const { error } = await supabase
+    .from("groups")
+    .update({ dropin_pence: dropin })
+    .eq("id", groupId);
+  check(error);
+  await logActivity(
+    supabase,
+    "Changed single session price",
+    dropin === null ? "Not set" : `${pounds(dropin)} a session`,
+    groupId,
+  );
   refresh();
 }
 
