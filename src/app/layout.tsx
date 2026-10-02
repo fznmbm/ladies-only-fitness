@@ -1,18 +1,18 @@
 import type { Metadata, Viewport } from "next";
-import { DM_Sans, Fraunces } from "next/font/google";
+import localFont from "next/font/local";
 import "./globals.css";
 
-// Fonts are downloaded once at build time and served from this site, so the
-// first screen no longer waits on Google.
-const sans = DM_Sans({
-  subsets: ["latin"],
-  weight: ["400", "500", "700"],
+// The two fonts are kept in this project (src/app/fonts), so building the app
+// never depends on Google's font servers being reachable.
+const sans = localFont({
+  src: "./fonts/dm-sans.woff2",
+  weight: "100 1000",
   display: "swap",
   variable: "--font-sans",
 });
-const display = Fraunces({
-  subsets: ["latin"],
-  axes: ["opsz"],
+const display = localFont({
+  src: "./fonts/fraunces.woff2",
+  weight: "100 900",
   display: "swap",
   variable: "--font-display",
 });
